@@ -19,6 +19,9 @@ test -s "$pack/.image_cfg.json.tmp"
 cmp "$pack/bootloader.bin" output/d21x_demo128-nand-carplay_baremetal_bootloader/images/d21x.bin
 scons --apply-def="$config" 2>&1 | tee "output/ci-logs/$variant-config.log"
 scons -j"$jobs" 2>&1 | tee "output/ci-logs/$variant-build.log"
+if [[ "$variant" == headless ]]; then
+  test -s "output/${config%_defconfig}/packages/third-party/rt-carplay/examples/rtthread_headless/headless.o"
+fi
 dest="output/ci/$variant"
 mkdir -p "$dest"
 mapfile -t images < <(find "output/${config%_defconfig}/images" -maxdepth 1 -type f -name '*.img')
@@ -35,6 +38,9 @@ cp "$pack/.image_cfg.json.tmp" "$dest/image-layout.json"
   printf 'variant=%s\ndefconfig=%s\n' "$variant" "$config"
   git submodule status --recursive
   toolchain/bin/riscv64-unknown-elf-gcc --version | head -1
+  if [[ "$variant" == headless ]]; then
+    printf 'generic_headless_example=COMPILED_NOT_STARTED\n'
+  fi
   printf 'hardware_validation=NOT_RUN\n'
 } > "$dest/source-manifest.txt"
 (cd "$dest" && sha256sum *.img bootloader.bin firmware.config image-layout.json source-manifest.txt > SHA256SUMS)
