@@ -15,3 +15,9 @@ ${CC:-cc} -std=c99 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
   usb_osal_baremetal.c generated/tests/hub.c tests/test_baremetal_hub.c \
   -Wl,--gc-sections -o generated/tests/baremetal-hub
 ASAN_OPTIONS=detect_leaks=1 generated/tests/baremetal-hub
+${CC:-cc} -std=c99 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
+  -DCONFIG_USB_HS -Itests/baremetal -Itests/config -I. \
+  -I../cherryusb/core -I../cherryusb/common -Isdk/class/aic \
+  sdk/demo/aicupg_for_usb.c usbd_baremetal.c tests/test_baremetal_device.c \
+  -o generated/tests/baremetal-device
+ASAN_OPTIONS=detect_leaks=1 generated/tests/baremetal-device

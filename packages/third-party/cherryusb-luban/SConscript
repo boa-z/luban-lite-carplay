@@ -329,4 +329,3 @@ for source in src:
 group = DefineGroup('CherryUSB', unique_src, depend = ['LPKG_USING_CHERRYUSB_V1_5_0'], CPPPATH = path, CPPDEFINES = CPPDEFINES, LIBS = libs, LIBPATH = lib_path)
 
 Return('group')
-
