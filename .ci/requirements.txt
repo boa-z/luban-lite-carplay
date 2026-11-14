@@ -1,0 +1,4 @@
+scons==4.8.1
+pycryptodomex==3.23.0
+asn1crypto==1.5.1
+gmssl==3.2.2

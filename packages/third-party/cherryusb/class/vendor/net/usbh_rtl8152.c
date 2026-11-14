@@ -12,6 +12,10 @@
 
 #define DEV_FORMAT "/dev/rtl8152"
 
+#if CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE > (16 * 1024)
+#error "CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE must be less than 16K"
+#endif
+
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_rx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE, CONFIG_USB_ALIGN_SIZE)];
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_tx_buffer[USB_ALIGN_UP(CONFIG_USBHOST_RTL8152_ETH_MAX_TX_SIZE, CONFIG_USB_ALIGN_SIZE)];
 static USB_NOCACHE_RAM_SECTION USB_MEM_ALIGNX uint8_t g_rtl8152_inttx_buffer[USB_ALIGN_UP(2, CONFIG_USB_ALIGN_SIZE)];
@@ -962,10 +966,10 @@ static int usbh_rtl8152_read_regs(struct usbh_rtl8152 *rtl8152_class,
     setup->wLength = size;
 
     ret = usbh_control_transfer(rtl8152_class->hport, setup, g_rtl8152_buf);
-    if (ret < 8) {
+    if (ret < size) {
         return ret;
     }
-    memcpy(data, g_rtl8152_buf, MIN(ret - 8, size));
+    memcpy(data, g_rtl8152_buf, size);
 
     return ret;
 }
@@ -1034,17 +1038,17 @@ static int generic_ocp_read(struct usbh_rtl8152 *tp, uint16_t index, uint16_t si
 static int generic_ocp_write(struct usbh_rtl8152 *tp, uint16_t index, uint16_t byteen,
                              uint16_t size, void *data, uint16_t type)
 {
-    int ret;
+    int ret = -USB_ERR_INVAL;
     uint16_t byteen_start, byteen_end, byen;
     uint16_t limit = 512;
     uint8_t *buf = data;
 
     /* both size and indix must be 4 bytes align */
     if ((size & 3) || !size || (index & 3) || !buf)
-        return -USB_ERR_INVAL;
+        return ret;
 
     if ((uint32_t)index + (uint32_t)size > 0xffff)
-        return -USB_ERR_INVAL;
+        return ret;
 
     byteen_start = byteen & BYTE_EN_START_MASK;
     byteen_end = byteen & BYTE_EN_END_MASK;
@@ -1121,7 +1125,7 @@ static inline int usb_ocp_write(struct usbh_rtl8152 *tp, uint16_t index, uint16_
 
 static uint32_t ocp_read_dword(struct usbh_rtl8152 *tp, uint16_t type, uint16_t index)
 {
-    uint32_t data;
+    uint32_t data = 0;
 
     generic_ocp_read(tp, index, sizeof(data), &data, type);
 
@@ -1596,8 +1600,8 @@ static void r8153_teredo_off(struct usbh_rtl8152 *tp)
         case RTL_VER_15:
         default:
             /* The bit 0 ~ 7 are relative with teredo settings. They are
-		 * W1C (write 1 to clear), so set all 1 to disable it.
-		 */
+             * W1C (write 1 to clear), so set all 1 to disable it.
+             */
             ocp_write_byte(tp, MCU_TYPE_PLA, PLA_TEREDO_CFG, 0xff);
             break;
     }
@@ -2050,7 +2054,7 @@ static int usbh_rtl8152_connect(struct usbh_hubport *hport, uint8_t intf)
     }
 
     memset(mac_buffer, 0, 12);
-    ret = usbh_get_string_desc(rtl8152_class->hport, 3, (uint8_t *)mac_buffer);
+    ret = usbh_get_string_desc(rtl8152_class->hport, 3, (uint8_t *)mac_buffer, 12);
     if (ret < 0) {
         return ret;
     }
@@ -2138,17 +2142,10 @@ void usbh_rtl8152_rx_thread(CONFIG_USB_OSAL_THREAD_SET_ARGV)
     int ret;
     uint16_t len;
     uint16_t data_offset;
-#if CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE <= (16 * 1024)
-    uint32_t transfer_size = CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE;
-#else
-    uint32_t transfer_size = (16 * 1024);
-#endif
 
     (void)CONFIG_USB_OSAL_THREAD_GET_ARGV;
     USB_LOG_INFO("Create rtl8152 rx thread\r\n");
-    // clang-format off
-find_class:
-    // clang-format on
+
     g_rtl8152_class.connect_status = false;
     if (usbh_find_class_instance("/dev/rtl8152") == NULL) {
         goto delete;
@@ -2157,8 +2154,7 @@ find_class:
     while (g_rtl8152_class.connect_status == false) {
         ret = usbh_rtl8152_get_connect_status(&g_rtl8152_class);
         if (ret < 0) {
-            usb_osal_msleep(100);
-            goto find_class;
+            goto delete;
         }
         usb_osal_msleep(128);
     }
@@ -2174,27 +2170,32 @@ find_class:
 
     g_rtl8152_rx_length = 0;
     while (1) {
-        usbh_bulk_urb_fill(&g_rtl8152_class.bulkin_urb, g_rtl8152_class.hport, g_rtl8152_class.bulkin, &g_rtl8152_rx_buffer[g_rtl8152_rx_length], transfer_size, USB_OSAL_WAITING_FOREVER, NULL, NULL);
+        usbh_bulk_urb_fill(&g_rtl8152_class.bulkin_urb, g_rtl8152_class.hport, g_rtl8152_class.bulkin, g_rtl8152_rx_buffer, CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE, USB_OSAL_WAITING_FOREVER, NULL, NULL);
         ret = usbh_submit_urb(&g_rtl8152_class.bulkin_urb);
         if (ret < 0) {
-            goto find_class;
+            goto delete;
         }
 
-        g_rtl8152_rx_length += g_rtl8152_class.bulkin_urb.actual_length;
+        g_rtl8152_rx_length = g_rtl8152_class.bulkin_urb.actual_length;
+        if (g_rtl8152_rx_length == 0) {
+            continue;
+        }
 
-        /* A transfer is complete because last packet is a short packet.
-         * Short packet is not zero, match g_rtl8152_rx_length % USB_GET_MAXPACKETSIZE(g_rtl8152_class.bulkin->wMaxPacketSize).
-         * Short packet is zero, check if g_rtl8152_class.bulkin_urb.actual_length < transfer_size, for example transfer is complete with size is 1024 < 2048.
-        */
-        if (g_rtl8152_rx_length % USB_GET_MAXPACKETSIZE(g_rtl8152_class.bulkin->wMaxPacketSize) ||
-            (g_rtl8152_class.bulkin_urb.actual_length < transfer_size)) {
+        if (g_rtl8152_rx_length < CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE) {
             data_offset = 0;
 
             USB_LOG_DBG("rxlen:%d\r\n", g_rtl8152_rx_length);
             while (g_rtl8152_rx_length > 0) {
+                if (g_rtl8152_rx_length < sizeof(struct rx_desc)) {
+                    break;
+                }
                 struct rx_desc *rx_desc = (struct rx_desc *)&g_rtl8152_rx_buffer[data_offset];
 
                 len = rx_desc->opts1 & RX_LEN_MASK;
+                if (len == 0 || len > g_rtl8152_rx_length - sizeof(struct rx_desc)) {
+                    USB_LOG_ERR("invalid rtl8152 rx length\r\n");
+                    break;
+                }
 
                 USB_LOG_DBG("data_offset:%d, eth len:%d\r\n", data_offset, len);
 
@@ -2205,20 +2206,16 @@ find_class:
                 g_rtl8152_rx_length -= (len + sizeof(struct rx_desc));
 
                 if (len & (RX_ALIGN - 1)) {
-                    data_offset += (RX_ALIGN - (len & (RX_ALIGN - 1)));
-                    g_rtl8152_rx_length -= (RX_ALIGN - (len & (RX_ALIGN - 1)));
+                    uint32_t padding = RX_ALIGN - (len & (RX_ALIGN - 1));
+                    if (padding > g_rtl8152_rx_length) {
+                        break;
+                    }
+                    data_offset += padding;
+                    g_rtl8152_rx_length -= padding;
                 }
             }
         } else {
-#if CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE <= (16 * 1024)
-            if (g_rtl8152_rx_length == CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE) {
-#else
-            if ((g_rtl8152_rx_length + (16 * 1024)) > CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE) {
-#endif
-                USB_LOG_ERR("Rx packet is overflow, please reduce tcp window size or increase CONFIG_USBHOST_RTL8152_ETH_MAX_RX_SIZE\r\n");
-                while (1) {
-                }
-            }
+            USB_LOG_ERR("rtl8152 packet overflow\r\n");
         }
     }
     // clang-format off
@@ -2241,6 +2238,10 @@ int usbh_rtl8152_eth_output(uint32_t buflen)
         return -USB_ERR_NOTCONN;
     }
 
+    if (buflen > (sizeof(g_rtl8152_tx_buffer) - sizeof(struct tx_desc))) {
+        return -USB_ERR_NOMEM;
+    }
+
     tx_desc = (struct tx_desc *)g_rtl8152_tx_buffer;
     tx_desc->opts1 = buflen | TX_FS | TX_LS;
     tx_desc->opts2 = 0;
@@ -2249,16 +2250,6 @@ int usbh_rtl8152_eth_output(uint32_t buflen)
 
     usbh_bulk_urb_fill(&g_rtl8152_class.bulkout_urb, g_rtl8152_class.hport, g_rtl8152_class.bulkout, g_rtl8152_tx_buffer, buflen + sizeof(struct tx_desc), USB_OSAL_WAITING_FOREVER, NULL, NULL);
     return usbh_submit_urb(&g_rtl8152_class.bulkout_urb);
-}
-
-__WEAK void usbh_rtl8152_run(struct usbh_rtl8152 *rtl8152_class)
-{
-    (void)rtl8152_class;
-}
-
-__WEAK void usbh_rtl8152_stop(struct usbh_rtl8152 *rtl8152_class)
-{
-    (void)rtl8152_class;
 }
 
 static const uint16_t rtl_id_table[][2] = {

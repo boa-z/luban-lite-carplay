@@ -13,6 +13,9 @@
 #include <malloc.h>
 #include <console.h>
 #include <aic_core.h>
+#ifdef LPKG_USING_CHERRYUSB_V1_5_0
+#include "usb_luban_baremetal.h"
+#endif
 #include <aic_common.h>
 #include <aic_errno.h>
 #include <aic_io.h>

@@ -374,8 +374,15 @@ static void rt_wlan_auto_connect_run(struct rt_work *work, void *parameter)
     rt_wlan_connect((char *)cfg_info.info.ssid.val, password);
 exit:
     rt_mutex_release(&mgnt_mutex);
+    /*
+     * Only clear the callback so rt_wlan_cyclic_check() can submit the work
+     * again.  Do not rt_memset() the whole work item: the embedded rt_timer
+     * is a kernel object, and wiping it here (or while a timer event is in
+     * flight) corrupts the Timer object list the next time it is walked.
+     */
     level = rt_hw_interrupt_disable();
-    rt_memset(work, 0, sizeof(struct rt_work));
+    work->work_func = RT_NULL;
+    work->work_data = RT_NULL;
     rt_hw_interrupt_enable(level);
 }
 
@@ -391,8 +398,10 @@ static void rt_wlan_cyclic_check(void *parameter)
         rt_hw_interrupt_enable(level);
         if(rt_work_submit(&work,RT_TICK_PER_SECOND) != RT_EOK)
         {
+            /* keep the embedded timer object intact, see the exit path below */
             level = rt_hw_interrupt_disable();
-            rt_memset(&work, 0, sizeof(struct rt_work));
+            work.work_func = RT_NULL;
+            work.work_data = RT_NULL;
             rt_hw_interrupt_enable(level);
         }
     }

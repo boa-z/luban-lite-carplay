@@ -1,138 +1,129 @@
 /*
- * Copyright (c) 2025, sakumisu
+ * Copyright (c) 2024, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
- *
-*/
-
+ */
 #include "usbd_core.h"
 #include "usbd_cdc_ecm.h"
 
-/*!< endpoint address */
-#define CDC_IN_EP          0x81
-#define CDC_OUT_EP         0x02
-#define CDC_INT_EP         0x83
+#ifndef CONFIG_USBDEV_CDC_ECM_USING_LWIP
+#error "Please enable CONFIG_USBDEV_CDC_ECM_USING_LWIP for this demo"
+#endif
 
-#define USBD_VID           0x33C3
+/*!< endpoint address */
+#define CDC_IN_EP  0x81
+#define CDC_OUT_EP 0x02
+#define CDC_INT_EP 0x83
+
+#define USBD_VID           0xFFFF
 #define USBD_PID           0xFFFF
 #define USBD_MAX_POWER     100
 #define USBD_LANGID_STRING 1033
 
 /*!< config descriptor size */
-#define USB_CONFIG_SIZE    (9 + CDC_ECM_DESCRIPTOR_LEN)
-
-#ifdef CONFIG_USB_HS
-#define CDC_MAX_MPS 512
-#else
-#define CDC_MAX_MPS 64
-#endif
-
-#define CDC_ECM_ETH_STATISTICS_BITMAP 0x00000000
+#define USB_CONFIG_SIZE (9 + CDC_ECM_DESCRIPTOR_LEN)
 
 /* str idx = 4 is for mac address: aa:bb:cc:dd:ee:ff*/
-#define CDC_ECM_MAC_STRING_INDEX      4
+#define CDC_ECM_MAC_STRING_INDEX 4
 
-/*!< global descriptor */
-static const uint8_t cdc_eth_descriptor[] = {
-    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01),
+static const uint8_t device_descriptor[] = {
+    USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, USBD_VID, USBD_PID, 0x0100, 0x01)
+};
+
+static const uint8_t config_descriptor_hs[] = {
     USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
-    CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, CDC_MAX_MPS, CDC_ECM_ETH_STATISTICS_BITMAP, CONFIG_CDC_ECM_ETH_MAX_SEGSZE, 0, 0, CDC_ECM_MAC_STRING_INDEX),
-    ///////////////////////////////////////
-    /// string0 descriptor
-    ///////////////////////////////////////
-    USB_LANGID_INIT(USBD_LANGID_STRING),
-    ///////////////////////////////////////
-    /// string1 descriptor
-    ///////////////////////////////////////
-    0x14,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    'C', 0x00,                  /* wcChar0 */
-    'h', 0x00,                  /* wcChar1 */
-    'e', 0x00,                  /* wcChar2 */
-    'r', 0x00,                  /* wcChar3 */
-    'r', 0x00,                  /* wcChar4 */
-    'y', 0x00,                  /* wcChar5 */
-    'U', 0x00,                  /* wcChar6 */
-    'S', 0x00,                  /* wcChar7 */
-    'B', 0x00,                  /* wcChar8 */
-    ///////////////////////////////////////
-    /// string2 descriptor
-    ///////////////////////////////////////
-    0x2E,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    'C', 0x00,                  /* wcChar0 */
-    'h', 0x00,                  /* wcChar1 */
-    'e', 0x00,                  /* wcChar2 */
-    'r', 0x00,                  /* wcChar3 */
-    'r', 0x00,                  /* wcChar4 */
-    'y', 0x00,                  /* wcChar5 */
-    'U', 0x00,                  /* wcChar6 */
-    'S', 0x00,                  /* wcChar7 */
-    'B', 0x00,                  /* wcChar8 */
-    ' ', 0x00,                  /* wcChar9 */
-    'C', 0x00,                  /* wcChar10 */
-    'D', 0x00,                  /* wcChar11 */
-    'C', 0x00,                  /* wcChar12 */
-    ' ', 0x00,                  /* wcChar13 */
-    'E', 0x00,                  /* wcChar14 */
-    'C', 0x00,                  /* wcChar15 */
-    'M', 0x00,                  /* wcChar16 */
-    ' ', 0x00,                  /* wcChar17 */
-    'D', 0x00,                  /* wcChar18 */
-    'E', 0x00,                  /* wcChar19 */
-    'M', 0x00,                  /* wcChar20 */
-    'O', 0x00,                  /* wcChar21 */
-    ///////////////////////////////////////
-    /// string3 descriptor
-    ///////////////////////////////////////
-    0x16,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    '2', 0x00,                  /* wcChar0 */
-    '0', 0x00,                  /* wcChar1 */
-    '2', 0x00,                  /* wcChar2 */
-    '2', 0x00,                  /* wcChar3 */
-    '1', 0x00,                  /* wcChar4 */
-    '2', 0x00,                  /* wcChar5 */
-    '3', 0x00,                  /* wcChar6 */
-    '4', 0x00,                  /* wcChar7 */
-    '5', 0x00,                  /* wcChar8 */
-    '6', 0x00,                  /* wcChar9 */
-    ///////////////////////////////////////
-    /// string4 descriptor
-    ///////////////////////////////////////
-    0x1A,                       /* bLength */
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */
-    'a', 0x00,                  /* wcChar0 */
-    'a', 0x00,                  /* wcChar1 */
-    'b', 0x00,                  /* wcChar2 */
-    'b', 0x00,                  /* wcChar3 */
-    'c', 0x00,                  /* wcChar4 */
-    'c', 0x00,                  /* wcChar5 */
-    'd', 0x00,                  /* wcChar6 */
-    'd', 0x00,                  /* wcChar7 */
-    'e', 0x00,                  /* wcChar8 */
-    'e', 0x00,                  /* wcChar9 */
-    'f', 0x00,                  /* wcChar10 */
-    'f', 0x00,                  /* wcChar11 */
-#ifdef CONFIG_USB_HS
-    ///////////////////////////////////////
-    /// device qualifier descriptor
-    ///////////////////////////////////////
-    0x0a,
-    USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER,
-    0x00,
-    0x02,
-    0x02,
-    0x02,
-    0x01,
-    0x40,
-    0x01,
-    0x00,
-#endif
-    0x00
+    CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, USB_BULK_EP_MPS_HS, CDC_ECM_MAC_STRING_INDEX)
+};
+
+static const uint8_t config_descriptor_fs[] = {
+    USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, USB_BULK_EP_MPS_FS, CDC_ECM_MAC_STRING_INDEX)
+};
+
+static const uint8_t device_quality_descriptor[] = {
+    USB_DEVICE_QUALIFIER_DESCRIPTOR_INIT(USB_2_0, 0xEF, 0x02, 0x01, 0x01),
+};
+
+static const uint8_t other_speed_config_descriptor_hs[] = {
+    USB_OTHER_SPEED_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, USB_BULK_EP_MPS_FS, CDC_ECM_MAC_STRING_INDEX)
+};
+
+static const uint8_t other_speed_config_descriptor_fs[] = {
+    USB_OTHER_SPEED_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x02, 0x01, USB_CONFIG_BUS_POWERED, USBD_MAX_POWER),
+    CDC_ECM_DESCRIPTOR_INIT(0x00, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP, USB_BULK_EP_MPS_HS, CDC_ECM_MAC_STRING_INDEX)
+};
+
+static const char *string_descriptors[] = {
+    (const char[]){ 0x09, 0x04 }, /* Langid */
+    "CherryUSB",                  /* Manufacturer */
+    "CherryUSB CDC ECM DEMO",     /* Product */
+    "2022123456",                 /* Serial Number */
+    "aabbccddeeff",               /* ecm mac address */
+};
+
+static const uint8_t *device_descriptor_callback(uint8_t speed)
+{
+    (void)speed;
+
+    return device_descriptor;
+}
+
+static const uint8_t *config_descriptor_callback(uint8_t speed)
+{
+    if (speed == USB_SPEED_HIGH) {
+        return config_descriptor_hs;
+    } else if (speed == USB_SPEED_FULL) {
+        return config_descriptor_fs;
+    } else {
+        return NULL;
+    }
+}
+
+static const uint8_t *device_quality_descriptor_callback(uint8_t speed)
+{
+    (void)speed;
+
+    return device_quality_descriptor;
+}
+
+static const uint8_t *other_speed_config_descriptor_callback(uint8_t speed)
+{
+    if (speed == USB_SPEED_HIGH) {
+        return other_speed_config_descriptor_hs;
+    } else if (speed == USB_SPEED_FULL) {
+        return other_speed_config_descriptor_fs;
+    } else {
+        return NULL;
+    }
+}
+
+static const char *string_descriptor_callback(uint8_t speed, uint8_t index)
+{
+    (void)speed;
+
+    if (index >= (sizeof(string_descriptors) / sizeof(char *))) {
+        return NULL;
+    }
+    return string_descriptors[index];
+}
+
+const struct usb_descriptor cdc_ecm_descriptor = {
+    .device_descriptor_callback = device_descriptor_callback,
+    .config_descriptor_callback = config_descriptor_callback,
+    .device_quality_descriptor_callback = device_quality_descriptor_callback,
+    .other_speed_descriptor_callback = other_speed_config_descriptor_callback,
+    .string_descriptor_callback = string_descriptor_callback
 };
 
 const uint8_t mac[6] = { 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+
+volatile bool cdc_ecm_tx_done = false;
+
+void usbd_cdc_ecm_data_send_done(uint32_t len)
+{
+    cdc_ecm_tx_done = true; // suggest you to use semaphore in os
+}
 
 #ifdef RT_USING_LWIP
 
@@ -150,7 +141,7 @@ const uint8_t mac[6] = { 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
 #include <dhcp_server.h>
 
 struct eth_device cdc_ecm_dev;
-static usb_osal_sem_t usbd_ecm_txok_sem;
+
 static rt_err_t rt_usbd_cdc_ecm_control(rt_device_t dev, int cmd, void *args)
 {
     switch (cmd) {
@@ -161,9 +152,8 @@ static rt_err_t rt_usbd_cdc_ecm_control(rt_device_t dev, int cmd, void *args)
                 uint8_t *mac_dev = (uint8_t *)args;
                 rt_memcpy(mac_dev, mac, 6);
                 mac_dev[5] = ~mac_dev[5]; /* device mac can't same as host. */
-            } else {
+            } else
                 return -RT_ERROR;
-            }
 
             break;
 
@@ -183,38 +173,21 @@ rt_err_t rt_usbd_cdc_ecm_eth_tx(rt_device_t dev, struct pbuf *p)
 {
     int ret;
 
+    cdc_ecm_tx_done = false;
     ret = usbd_cdc_ecm_eth_tx(p);
-
-    if (!ret) {
-        ret = usb_osal_sem_take(usbd_ecm_txok_sem, USB_OSAL_WAITING_FOREVER);
-    }
-
-    return ret;
+    if (ret == 0) {
+        while (!cdc_ecm_tx_done) {
+        }
+        return RT_EOK;
+    } else
+        return -RT_ERROR;
 }
-
-#ifdef RT_USING_DEVICE_OPS
-static const struct rt_device_ops aicusb_device_ecm_ops = {
-    .control = rt_usbd_cdc_ecm_control,
-};
-#endif
 
 void cdc_ecm_lwip_init(void)
 {
-#ifdef RT_USING_DEVICE_OPS
-    cdc_ecm_dev.parent.ops = &aicusb_device_ecm_ops;
-#else
     cdc_ecm_dev.parent.control = rt_usbd_cdc_ecm_control;
-#endif
-
     cdc_ecm_dev.eth_rx = rt_usbd_cdc_ecm_eth_rx;
     cdc_ecm_dev.eth_tx = rt_usbd_cdc_ecm_eth_tx;
-
-    usbd_ecm_txok_sem = usb_osal_sem_create(0);
-    if (usbd_ecm_txok_sem ==NULL)
-    {
-        USB_LOG_ERR("Failed to create eth_tx semaphore\r\n");
-        return;
-    }
 
     eth_device_init(&cdc_ecm_dev, "u0");
 
@@ -227,17 +200,20 @@ void usbd_cdc_ecm_data_recv_done(uint32_t len)
     eth_device_ready(&cdc_ecm_dev);
 }
 
-void usbd_cdc_ecm_data_send_done(uint32_t len)
-{
-    usb_osal_sem_give(usbd_ecm_txok_sem);
-}
-
 #else
+#include "netif/etharp.h"
+#include "lwip/init.h"
+#include "lwip/netif.h"
+#include "lwip/pbuf.h"
+
+#include "dhserver.h"
+#include "dnserver.h"
+
 /*Static IP ADDRESS: IP_ADDR0.IP_ADDR1.IP_ADDR2.IP_ADDR3 */
-#define IP_ADDR0 (uint8_t)192
-#define IP_ADDR1 (uint8_t)168
-#define IP_ADDR2 (uint8_t)123
-#define IP_ADDR3 (uint8_t)100
+#define IP_ADDR0      (uint8_t)192
+#define IP_ADDR1      (uint8_t)168
+#define IP_ADDR2      (uint8_t)7
+#define IP_ADDR3      (uint8_t)1
 
 /*NETMASK*/
 #define NETMASK_ADDR0 (uint8_t)255
@@ -246,34 +222,59 @@ void usbd_cdc_ecm_data_send_done(uint32_t len)
 #define NETMASK_ADDR3 (uint8_t)0
 
 /*Gateway Address*/
-#define GW_ADDR0 (uint8_t)192
-#define GW_ADDR1 (uint8_t)168
-#define GW_ADDR2 (uint8_t)123
-#define GW_ADDR3 (uint8_t)1
-
-#include "netif/etharp.h"
-#include "lwip/init.h"
-#include "lwip/netif.h"
-#include "lwip/pbuf.h"
+#define GW_ADDR0      (uint8_t)0
+#define GW_ADDR1      (uint8_t)0
+#define GW_ADDR2      (uint8_t)0
+#define GW_ADDR3      (uint8_t)0
 
 const ip_addr_t ipaddr = IPADDR4_INIT_BYTES(IP_ADDR0, IP_ADDR1, IP_ADDR2, IP_ADDR3);
 const ip_addr_t netmask = IPADDR4_INIT_BYTES(NETMASK_ADDR0, NETMASK_ADDR1, NETMASK_ADDR2, NETMASK_ADDR3);
 const ip_addr_t gateway = IPADDR4_INIT_BYTES(GW_ADDR0, GW_ADDR1, GW_ADDR2, GW_ADDR3);
 
+#define NUM_DHCP_ENTRY 3
+
+static dhcp_entry_t entries[NUM_DHCP_ENTRY] = {
+    /* mac    ip address        subnet mask        lease time */
+    { { 0 }, { 192, 168, 7, 2 }, { 255, 255, 255, 0 }, 24 * 60 * 60 },
+    { { 0 }, { 192, 168, 7, 3 }, { 255, 255, 255, 0 }, 24 * 60 * 60 },
+    { { 0 }, { 192, 168, 7, 4 }, { 255, 255, 255, 0 }, 24 * 60 * 60 }
+};
+
+static dhcp_config_t dhcp_config = {
+    { 192, 168, 7, 1 }, /* server address */
+    67,                 /* port */
+    { 192, 168, 7, 1 }, /* dns server */
+    "cherry",           /* dns suffix */
+    NUM_DHCP_ENTRY,     /* num entry */
+    entries             /* entries */
+};
+
+static bool dns_query_proc(const char *name, ip_addr_t *addr)
+{
+    if (strcmp(name, "cdc_ecm.cherry") == 0 || strcmp(name, "www.cdc_ecm.cherry") == 0) {
+        addr->addr = ipaddr.addr;
+        return true;
+    }
+    return false;
+}
+
 static struct netif cdc_ecm_netif; //network interface
 
 /* Network interface name */
-#define IFNAME0 'E'
-#define IFNAME1 'X'
+#define IFNAME0        'E'
+#define IFNAME1        'X'
 
-static err_t linkoutput_fn(struct netif *netif, struct pbuf *p)
+err_t linkoutput_fn(struct netif *netif, struct pbuf *p)
 {
-    static int ret;
+    int ret;
 
+    cdc_ecm_tx_done = false;
     ret = usbd_cdc_ecm_eth_tx(p);
-    if (ret == 0)
+    if (ret == 0) {
+        while (!cdc_ecm_tx_done) {
+        }
         return ERR_OK;
-    else
+    } else
         return ERR_BUF;
 }
 
@@ -293,8 +294,8 @@ err_t cdc_ecm_if_init(struct netif *netif)
 
 err_t cdc_ecm_if_input(struct netif *netif)
 {
-    static err_t err;
-    static struct pbuf *p;
+    err_t err;
+    struct pbuf *p;
 
     p = usbd_cdc_ecm_eth_rx();
     if (p != NULL) {
@@ -316,15 +317,18 @@ void cdc_ecm_lwip_init(void)
 
     netif->hwaddr_len = 6;
     memcpy(netif->hwaddr, mac, 6);
+    netif->hwaddr[5] = ~netif->hwaddr[5]; /* device mac can't same as host. */
 
     netif = netif_add(netif, &ipaddr, &netmask, &gateway, NULL, cdc_ecm_if_init, netif_input);
     netif_set_default(netif);
     while (!netif_is_up(netif)) {
     }
 
-    // while (dhserv_init(&dhcp_config)) {}
+    while (dhserv_init(&dhcp_config)) {
+    }
 
-    // while (dnserv_init(&ipaddr, PORT_DNS, dns_query_proc)) {}
+    while (dnserv_init(IP_ADDR_ANY, 53, dns_query_proc)) {
+    }
 }
 
 void usbd_cdc_ecm_data_recv_done(uint32_t len)
@@ -345,9 +349,6 @@ static void usbd_event_handler(uint8_t busid, uint8_t event)
         case USBD_EVENT_CONNECTED:
             break;
         case USBD_EVENT_DISCONNECTED:
-#ifdef RT_USING_LWIP
-            usb_osal_sem_reset(usbd_ecm_txok_sem);
-#endif
             break;
         case USBD_EVENT_RESUME:
             break;
@@ -371,18 +372,15 @@ struct usbd_interface intf1;
 /* ecm only supports in linux, and you should input the following command
  *
  * sudo ifconfig enxaabbccddeeff up
- * sudo dhcpclient enxaabbccddeeff
+ * sudo dhclient enxaabbccddeeff
 */
-int cdc_ecm_init(void)
+void cdc_ecm_init(uint8_t busid, uintptr_t reg_base)
 {
     cdc_ecm_lwip_init();
 
-    usbd_desc_register(0, cdc_eth_descriptor);
-    usbd_add_interface(0, usbd_cdc_ecm_init_intf(&intf0, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP));
-    usbd_add_interface(0, usbd_cdc_ecm_init_intf(&intf1, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP));
-    usbd_initialize(0, USB_DEV_BASE, usbd_event_handler);
+    usbd_desc_register(busid, &cdc_ecm_descriptor);
 
-    return 0;
+    usbd_add_interface(busid, usbd_cdc_ecm_init_intf(&intf0, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP));
+    usbd_add_interface(busid, usbd_cdc_ecm_init_intf(&intf1, CDC_INT_EP, CDC_OUT_EP, CDC_IN_EP));
+    usbd_initialize(busid, reg_base, usbd_event_handler);
 }
-
-INIT_DEVICE_EXPORT(cdc_ecm_init);

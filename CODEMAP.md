@@ -10,6 +10,7 @@
 | Baremetal | HelloWorld | `application/baremetal/helloworld/` | 裸机示例程序 |
 | FreeRTOS | HelloWorld | `application/freertos/helloworld/` | FreeRTOS 示例程序 |
 | RT-Thread | HelloWorld | `application/rt-thread/helloworld/` | RT-Thread 示例程序 |
+| RT-Thread | rtcarplay | `application/rt-thread/rtcarplay/` | CarPlay 接收应用（USB/无线，D213） |
 | uCOS-II | HelloWorld | `application/ucos-ii/helloworld/` | uCOS-II 示例程序 |
 
 ## 板级配置 (target/)
@@ -56,6 +57,7 @@
 | demo100-nor | `target/d21x/demo100-nor/` |
 | demo128-mmc | `target/d21x/demo128-mmc/` |
 | demo128-nand | `target/d21x/demo128-nand/` |
+| demo128-nand-carplay | `target/d21x/demo128-nand-carplay/` |
 | demo88-mmc | `target/d21x/demo88-mmc/` |
 
 ### g72x

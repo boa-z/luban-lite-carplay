@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+config LPKG_USING_CHERRYUSB_IPHETH
+    bool "Apple iPhone USB Ethernet external CherryUSB host class"
+    depends on LPKG_CHERRYUSB_HOST && RT_USING_LWIP
+    default n
+    help
+      Independent IPHETH Ethernet driver. Does not select a USB configuration
+      or initialize controllers; USBMUX and the application own those policies.
+
+config LPKG_CHERRYUSB_IPHETH_PATH
+    string "cherryusb-ipheth repository path (relative to SDK root)"
+    depends on LPKG_USING_CHERRYUSB_IPHETH
+    default "packages/third-party/cherryusb-ipheth"
+    help
+      Path to the cherryusb-ipheth checkout.  The SDK default points at the
+      bundled git submodule.  An absolute path or a path outside the SDK can
+      be used to build against a separate checkout.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, sakumisu
+ * Copyright (c) 2024, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -47,4 +47,4 @@ void usbh_cdc_ecm_rx_thread(CONFIG_USB_OSAL_THREAD_SET_ARGV);
 }
 #endif
 
-#endif /* USBH_CDC_ACM_H */
+#endif /* USBH_CDC_ECM_H */

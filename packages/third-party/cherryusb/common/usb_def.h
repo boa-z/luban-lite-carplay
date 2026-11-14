@@ -34,6 +34,10 @@
 /**< maximum packet size (MPS) for EP 0 */
 #define USB_CTRL_EP_MPS 64
 
+/**< maximum packet size (MPS) for bulk EP */
+#define USB_BULK_EP_MPS_HS 512
+#define USB_BULK_EP_MPS_FS 64
+
 /* USB PID Types */
 #define USB_PID_OUT   (0x01) /* Tokens */
 #define USB_PID_IN    (0x09)
@@ -100,6 +104,8 @@
 #define USB_REQUEST_LOOPBACK_DATA_WRITE 0x15
 #define USB_REQUEST_LOOPBACK_DATA_READ  0x16
 #define USB_REQUEST_SET_INTERFACE_DS    0x17
+#define USB_REQUEST_SET_SEL             0x30
+#define USB_REQUEST_SET_ISOCH_DLY       0x31
 
 /* USB Standard Feature selectors */
 #define USB_FEATURE_ENDPOINT_HALT  0
@@ -112,11 +118,15 @@
 #define USB_FEATURE_AHNPSUPPORT    4
 #define USB_FEATURE_AALTHNPSUPPORT 5
 #define USB_FEATURE_DEBUGMODE      6
+#define USB_FEATURE_U1_ENABLE      0x30
+#define USB_FEATURE_U2_ENABLE      0x31
 
 /* USB GET_STATUS Bit Values */
 #define USB_GETSTATUS_ENDPOINT_HALT 0x01
 #define USB_GETSTATUS_SELF_POWERED  0x01
 #define USB_GETSTATUS_REMOTE_WAKEUP 0x02
+#define USB_GETSTATUS_U1_ENABLE     0x04
+#define USB_GETSTATUS_U2_ENABLE     0x08
 
 /* USB Descriptor Types */
 #define USB_DESCRIPTOR_TYPE_DEVICE                0x01U
@@ -133,6 +143,7 @@
 #define USB_DESCRIPTOR_TYPE_BINARY_OBJECT_STORE   0x0FU
 #define USB_DESCRIPTOR_TYPE_DEVICE_CAPABILITY     0x10U
 #define USB_DESCRIPTOR_TYPE_WIRELESS_ENDPOINTCOMP 0x11U
+#define USB_DESCRIPTOR_TYPE_ENDPOINT_COMPANION    0x30U
 
 /* Class Specific Descriptor */
 #define USB_CS_DESCRIPTOR_TYPE_DEVICE        0x21U
@@ -314,24 +325,24 @@
 /* Setup packet definition used to read raw data from USB line */
 struct usb_setup_packet {
     /** Request type. Bits 0:4 determine recipient, see
-	 * \ref usb_request_recipient. Bits 5:6 determine type, see
-	 * \ref usb_request_type. Bit 7 determines data transfer direction, see
-	 * \ref usb_endpoint_direction.
-	 */
+     * \ref usb_request_recipient. Bits 5:6 determine type, see
+     * \ref usb_request_type. Bit 7 determines data transfer direction, see
+     * \ref usb_endpoint_direction.
+     */
     uint8_t bmRequestType;
 
     /** Request. If the type bits of bmRequestType are equal to
-	 * \ref usb_request_type::LIBUSB_REQUEST_TYPE_STANDARD
-	 * "USB_REQUEST_TYPE_STANDARD" then this field refers to
-	 * \ref usb_standard_request. For other cases, use of this field is
-	 * application-specific. */
+     * \ref usb_request_type::LIBUSB_REQUEST_TYPE_STANDARD
+     * "USB_REQUEST_TYPE_STANDARD" then this field refers to
+     * \ref usb_standard_request. For other cases, use of this field is
+     * application-specific. */
     uint8_t bRequest;
 
     /** Value. Varies according to request */
     uint16_t wValue;
 
     /** Index. Varies according to request, typically used to pass an index
-	 * or offset */
+     * or offset */
     uint16_t wIndex;
 
     /** Number of bytes to transfer */
@@ -400,6 +411,17 @@ struct usb_endpoint_descriptor {
 } __PACKED;
 
 #define USB_SIZEOF_ENDPOINT_DESC 7
+
+/** Standard Endpoint Companion Descriptor */
+struct usb_endpoint_companion_descriptor {
+    uint8_t bLength;          /* Descriptor size in bytes = 6 */
+    uint8_t bDescriptorType;  /* ENDPOINT COMPANION descriptor type = 0x30 */
+    uint8_t bMaxBurst;        /* Maximum number of bursts */
+    uint8_t bmAttributes;     /* Companion attributes */
+    uint16_t wBytesPerInterval; /* Bytes per interval */
+} __PACKED;
+
+#define USB_SIZEOF_ENDPOINT_COMPANION_DESC 6
 
 /** Unicode (UTF16LE) String Descriptor */
 struct usb_string_descriptor {
@@ -491,6 +513,7 @@ struct usb_msosv1_descriptor {
     uint8_t vendor_code;
     const uint8_t *compat_id;
     const uint8_t **comp_id_property;
+    uint16_t comp_id_property_count; /* Number of entries; zero disables property requests. */
 };
 
 /* MS OS 2.0 Header descriptor */
@@ -552,7 +575,7 @@ struct usb_bos_header_descriptor {
 } __PACKED;
 
 /* BOS Capability platform Descriptor */
-struct usb_bos_capability_platform_descriptor {
+struct usb_bos_capability_platform_common_descriptor {
     uint8_t bLength;
     uint8_t bDescriptorType;
     uint8_t bDevCapabilityType;
@@ -560,16 +583,26 @@ struct usb_bos_capability_platform_descriptor {
     uint8_t PlatformCapabilityUUID[16];
 } __PACKED;
 
-/* BOS Capability MS OS Descriptors version 2 */
-struct usb_bos_capability_msosv2_descriptor {
+/* Microsoft OS 2.0 Platform Capability Descriptor
+* See https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/
+* microsoft-defined-usb-descriptors
+* Adapted from the source:
+* https://github.com/sowbug/weblight/blob/master/firmware/webusb.c
+* (BSD-2) Thanks http://janaxelson.com/files/ms_os_20_descriptors.c
+*/
+struct usb_bos_capability_platform_winusb_descriptor {
+    struct usb_bos_capability_platform_common_descriptor common;
     uint32_t dwWindowsVersion;
     uint16_t wMSOSDescriptorSetTotalLength;
     uint8_t bVendorCode;
     uint8_t bAltEnumCode;
 } __PACKED;
 
-/* BOS Capability webusb */
-struct usb_bos_capability_webusb_descriptor {
+/* WebUSB Platform Capability Descriptor:
+* https://wicg.github.io/webusb/#webusb-platform-capability-descriptor
+*/
+struct usb_bos_capability_platform_webusb_descriptor {
+    struct usb_bos_capability_platform_common_descriptor common;
     uint16_t bcdVersion;
     uint8_t bVendorCode;
     uint8_t iLandingPage;
@@ -581,26 +614,6 @@ struct usb_bos_capability_extension_descriptor {
     uint8_t bDescriptorType;
     uint8_t bDevCapabilityType;
     uint32_t bmAttributes;
-} __PACKED;
-
-/* Microsoft OS 2.0 Platform Capability Descriptor
-* See https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/
-* microsoft-defined-usb-descriptors
-* Adapted from the source:
-* https://github.com/sowbug/weblight/blob/master/firmware/webusb.c
-* (BSD-2) Thanks http://janaxelson.com/files/ms_os_20_descriptors.c
-*/
-struct usb_bos_capability_platform_msosv2_descriptor {
-    struct usb_bos_capability_platform_descriptor platform_msos;
-    struct usb_bos_capability_msosv2_descriptor data_msosv2;
-} __PACKED;
-
-/* WebUSB Platform Capability Descriptor:
-* https://wicg.github.io/webusb/#webusb-platform-capability-descriptor
-*/
-struct usb_bos_capability_platform_webusb_descriptor {
-    struct usb_bos_capability_platform_descriptor platform_webusb;
-    struct usb_bos_capability_webusb_descriptor data_webusb;
 } __PACKED;
 
 struct usb_webusb_url_descriptor {
@@ -621,113 +634,253 @@ struct usb_bos_descriptor {
     uint32_t string_len;
 };
 
-/* USB Device Capability Descriptor */
-struct usb_device_capability_descriptor {
-    uint8_t bLength;
-    uint8_t bDescriptorType;
-    uint8_t bDevCapabilityType;
-} __PACKED;
-
 /** USB descriptor header */
 struct usb_desc_header {
     uint8_t bLength;         /**< descriptor length */
     uint8_t bDescriptorType; /**< descriptor type */
 };
+
 // clang-format off
-#define USB_DEVICE_DESCRIPTOR_INIT(bcdUSB, bDeviceClass,                \
-                                   bDeviceSubClass, bDeviceProtocol,    \
-                                   idVendor, idProduct, bcdDevice,      \
-                                   bNumConfigurations)                  \
-    0x12,                       /* bLength */                           \
-    USB_DESCRIPTOR_TYPE_DEVICE, /* bDescriptorType */                   \
-    WBVAL(bcdUSB),              /* bcdUSB */                            \
-    bDeviceClass,               /* bDeviceClass */                      \
-    bDeviceSubClass,            /* bDeviceSubClass */                   \
-    bDeviceProtocol,            /* bDeviceProtocol */                   \
-    0x40,                       /* bMaxPacketSize */                    \
-    WBVAL(idVendor),            /* idVendor */                          \
-    WBVAL(idProduct),           /* idProduct */                         \
-    WBVAL(bcdDevice),           /* bcdDevice */                         \
-    USB_STRING_MFC_INDEX,       /* iManufacturer */                     \
-    USB_STRING_PRODUCT_INDEX,   /* iProduct */                          \
-    USB_STRING_SERIAL_INDEX,    /* iSerial */                           \
+#define USB_DEVICE_DESCRIPTOR_INIT(bcdUSB, bDeviceClass, bDeviceSubClass, bDeviceProtocol, idVendor, idProduct, bcdDevice, bNumConfigurations) \
+    0x12,                       /* bLength */                                                                                              \
+    USB_DESCRIPTOR_TYPE_DEVICE, /* bDescriptorType */                                                                                      \
+    WBVAL(bcdUSB),              /* bcdUSB */                                                                                               \
+    bDeviceClass,               /* bDeviceClass */                                                                                         \
+    bDeviceSubClass,            /* bDeviceSubClass */                                                                                      \
+    bDeviceProtocol,            /* bDeviceProtocol */                                                                                      \
+    0x40,                       /* bMaxPacketSize */                                                                                       \
+    WBVAL(idVendor),            /* idVendor */                                                                                             \
+    WBVAL(idProduct),           /* idProduct */                                                                                            \
+    WBVAL(bcdDevice),           /* bcdDevice */                                                                                            \
+    USB_STRING_MFC_INDEX,       /* iManufacturer */                                                                                        \
+    USB_STRING_PRODUCT_INDEX,   /* iProduct */                                                                                             \
+    USB_STRING_SERIAL_INDEX,    /* iSerial */                                                                                              \
     bNumConfigurations          /* bNumConfigurations */
 
-#define USB_CONFIG_DESCRIPTOR_INIT(wTotalLength, bNumInterfaces,        \
-                                   bConfigurationValue,                 \
-                                   bmAttributes, bMaxPower)             \
-    0x09,                              /* bLength */                    \
-    USB_DESCRIPTOR_TYPE_CONFIGURATION, /* bDescriptorType */            \
-    WBVAL(wTotalLength),               /* wTotalLength */               \
-    bNumInterfaces,                    /* bNumInterfaces */             \
-    bConfigurationValue,               /* bConfigurationValue */        \
-    0x00,                              /* iConfiguration */             \
-    bmAttributes,                      /* bmAttributes */               \
+#define USB3_DEVICE_DESCRIPTOR_INIT(bcdUSB, bDeviceClass, bDeviceSubClass, bDeviceProtocol, idVendor, idProduct, bcdDevice, bNumConfigurations) \
+    0x12,                       /* bLength */                                                                                              \
+    USB_DESCRIPTOR_TYPE_DEVICE, /* bDescriptorType */                                                                                      \
+    WBVAL(USB_3_0),             /* bcdUSB */                                                                                               \
+    bDeviceClass,               /* bDeviceClass */                                                                                         \
+    bDeviceSubClass,            /* bDeviceSubClass */                                                                                      \
+    bDeviceProtocol,            /* bDeviceProtocol */                                                                                      \
+    0x09,                       /* bMaxPacketSize */                                                                                       \
+    WBVAL(idVendor),            /* idVendor */                                                                                             \
+    WBVAL(idProduct),           /* idProduct */                                                                                            \
+    WBVAL(bcdDevice),           /* bcdDevice */                                                                                            \
+    USB_STRING_MFC_INDEX,       /* iManufacturer */                                                                                        \
+    USB_STRING_PRODUCT_INDEX,   /* iProduct */                                                                                             \
+    USB_STRING_SERIAL_INDEX,    /* iSerial */                                                                                              \
+    bNumConfigurations          /* bNumConfigurations */
+
+#define USB_CONFIG_DESCRIPTOR_INIT(wTotalLength, bNumInterfaces, bConfigurationValue, bmAttributes, bMaxPower) \
+    0x09,                              /* bLength */                                                       \
+    USB_DESCRIPTOR_TYPE_CONFIGURATION, /* bDescriptorType */                                               \
+    WBVAL(wTotalLength),               /* wTotalLength */                                                  \
+    bNumInterfaces,                    /* bNumInterfaces */                                                \
+    bConfigurationValue,               /* bConfigurationValue */                                           \
+    0x00,                              /* iConfiguration */                                                \
+    bmAttributes,                      /* bmAttributes */                                                  \
     USB_CONFIG_POWER_MA(bMaxPower)     /* bMaxPower */
 
-#define USB_HID_DESCRIPTOR_INIT(bcdHID, bCountryCode, bNumDescriptors,  \
-                                bDescriptorType, wItemLength)           \
-    0x09,                              /* bLength */                    \
-    HID_DESCRIPTOR_TYPE_HID,           /* bDescriptorType */            \
-    WBVAL(bcdHID),                     /* bcdHID */                     \
-    bCountryCode,                      /* bCountryCode */               \
-    bNumDescriptors,                   /* bNumDescriptors */            \
-    bDescriptorType,                   /* bDescriptorType */            \
-    WBVAL(wItemLength)                 /* wItemLength */                \
+#define USB_DEVICE_QUALIFIER_DESCRIPTOR_INIT(bcdUSB, bDeviceClass, bDeviceSubClass, bDeviceProtocol, bNumConfigurations) \
+    0x0A,                                 /* bLength */                                                    \
+    USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER, /* bDescriptorType */                                            \
+    WBVAL(bcdUSB),              /* bcdUSB */                                                               \
+    bDeviceClass,               /* bDeviceClass */                                                         \
+    bDeviceSubClass,            /* bDeviceSubClass */                                                      \
+    bDeviceProtocol,            /* bDeviceProtocol */                                                      \
+    0x40,                       /* bMaxPacketSize */                                                       \
+    bNumConfigurations,         /* bNumConfigurations */                                                   \
+    0x00                        /* bReserved */
 
-#define USB_OTHERSPEED_CONFIG_DESCRIPTOR_INIT(wTotalLength, bNumInterfaces,        \
-                                   bConfigurationValue,                 \
-                                   bmAttributes, bMaxPower)             \
-    0x09,                              /* bLength */                    \
-    USB_DESCRIPTOR_TYPE_OTHER_SPEED,   /* bDescriptorType */            \
-    WBVAL(wTotalLength),               /* wTotalLength */               \
-    bNumInterfaces,                    /* bNumInterfaces */             \
-    bConfigurationValue,               /* bConfigurationValue */        \
-    0x00,                              /* iConfiguration */             \
-    bmAttributes,                      /* bmAttributes */               \
+#define USB_OTHER_SPEED_CONFIG_DESCRIPTOR_INIT(wTotalLength, bNumInterfaces, bConfigurationValue, bmAttributes, bMaxPower) \
+    0x09,                              /* bLength */                                                       \
+    USB_DESCRIPTOR_TYPE_OTHER_SPEED,   /* bDescriptorType */                                               \
+    WBVAL(wTotalLength),               /* wTotalLength */                                                  \
+    bNumInterfaces,                    /* bNumInterfaces */                                                \
+    bConfigurationValue,               /* bConfigurationValue */                                           \
+    0x00,                              /* iConfiguration */                                                \
+    bmAttributes,                      /* bmAttributes */                                                  \
     USB_CONFIG_POWER_MA(bMaxPower)     /* bMaxPower */
 
-#define USB_INTERFACE_DESCRIPTOR_INIT(bInterfaceNumber,                 \
-                                      bAlternateSetting,                \
-                                      bNumEndpoints,                    \
-                                      bInterfaceClass,                  \
-                                      bInterfaceSubClass,               \
-                                      bInterfaceProtocol,               \
-                                      iInterface)                       \
-    0x09,                          /* bLength */                        \
-    USB_DESCRIPTOR_TYPE_INTERFACE, /* bDescriptorType */                \
-    bInterfaceNumber,              /* bInterfaceNumber */               \
-    bAlternateSetting,             /* bAlternateSetting */              \
-    bNumEndpoints,                 /* bNumEndpoints */                  \
-    bInterfaceClass,               /* bInterfaceClass */                \
-    bInterfaceSubClass,            /* bInterfaceSubClass */             \
-    bInterfaceProtocol,            /* bInterfaceProtocol */             \
+#define USB_INTERFACE_DESCRIPTOR_INIT(bInterfaceNumber, bAlternateSetting, bNumEndpoints,                  \
+                                      bInterfaceClass, bInterfaceSubClass, bInterfaceProtocol, iInterface) \
+    0x09,                          /* bLength */                                                       \
+    USB_DESCRIPTOR_TYPE_INTERFACE, /* bDescriptorType */                                               \
+    bInterfaceNumber,              /* bInterfaceNumber */                                              \
+    bAlternateSetting,             /* bAlternateSetting */                                             \
+    bNumEndpoints,                 /* bNumEndpoints */                                                 \
+    bInterfaceClass,               /* bInterfaceClass */                                               \
+    bInterfaceSubClass,            /* bInterfaceSubClass */                                            \
+    bInterfaceProtocol,            /* bInterfaceProtocol */                                            \
     iInterface                     /* iInterface */
 
-#define USB_ENDPOINT_DESCRIPTOR_INIT(bEndpointAddress, bmAttributes,    \
-                                     wMaxPacketSize, bInterval)         \
-    0x07,                         /* bLength */                         \
-    USB_DESCRIPTOR_TYPE_ENDPOINT, /* bDescriptorType */                 \
-    bEndpointAddress,             /* bEndpointAddress */                \
-    bmAttributes,                 /* bmAttributes */                    \
-    WBVAL(wMaxPacketSize),        /* wMaxPacketSize */                  \
+#define USB_ENDPOINT_DESCRIPTOR_INIT(bEndpointAddress, bmAttributes, wMaxPacketSize, bInterval) \
+    0x07,                         /* bLength */                                             \
+    USB_DESCRIPTOR_TYPE_ENDPOINT, /* bDescriptorType */                                     \
+    bEndpointAddress,             /* bEndpointAddress */                                    \
+    bmAttributes,                 /* bmAttributes */                                        \
+    WBVAL(wMaxPacketSize),        /* wMaxPacketSize */                                      \
     bInterval                     /* bInterval */
 
-#define USB_IAD_INIT(bFirstInterface, bInterfaceCount, bFunctionClass,  \
-                     bFunctionSubClass, bFunctionProtocol)              \
-    0x08,                                      /* bLength */            \
-    USB_DESCRIPTOR_TYPE_INTERFACE_ASSOCIATION, /* bDescriptorType */    \
-    bFirstInterface,                           /* bFirstInterface */    \
-    bInterfaceCount,                           /* bInterfaceCount */    \
-    bFunctionClass,                            /* bFunctionClass */     \
-    bFunctionSubClass,                         /* bFunctionSubClass */  \
-    bFunctionProtocol,                         /* bFunctionProtocol */  \
+#define USB_ENDPOINT_COMPANION_DESCRIPTOR_INIT(bMaxBurst, bmAttributes, wBytesPerInterval) \
+    0x06,                         /* bLength */                                            \
+    USB_DESCRIPTOR_TYPE_ENDPOINT_COMPANION, /* bDescriptorType */                          \
+    bMaxBurst,                     /* bMaxBurst */                                         \
+    bmAttributes,                  /* bmAttributes */                                      \
+    WBVAL(wBytesPerInterval)       /* wBytesPerInterval */
+
+#define USB_IAD_DESCRIPTOR_INIT(bFirstInterface, bInterfaceCount, bFunctionClass, bFunctionSubClass, bFunctionProtocol) \
+    0x08,                                      /* bLength */                                             \
+    USB_DESCRIPTOR_TYPE_INTERFACE_ASSOCIATION, /* bDescriptorType */                                     \
+    bFirstInterface,                           /* bFirstInterface */                                     \
+    bInterfaceCount,                           /* bInterfaceCount */                                     \
+    bFunctionClass,                            /* bFunctionClass */                                      \
+    bFunctionSubClass,                         /* bFunctionSubClass */                                   \
+    bFunctionProtocol,                         /* bFunctionProtocol */                                   \
     0x00                                       /* iFunction */
 
-#define USB_LANGID_INIT(id)                                             \
-    0x04,                       /* bLength */                           \
-    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */                   \
+#define USB_LANGID_INIT(id)                           \
+    0x04,                       /* bLength */         \
+    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */ \
     WBVAL(id)                   /* wLangID0 */
+
+#define USB_BOS_HEADER_DESCRIPTOR_INIT(wTotalLength, bNumDeviceCaps) \
+    0x05,                       /* bLength */                        \
+    USB_DESCRIPTOR_TYPE_BINARY_OBJECT_STORE,    /* bDescriptorType */\
+    WBVAL(wTotalLength),        /* wTotalLength */                   \
+    bNumDeviceCaps              /* bNumDeviceCaps */
+
+#define USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_INIT(bVendorCode, iLandingPage)   \
+    0x18,                                           /* bLength */                \
+    USB_DESCRIPTOR_TYPE_DEVICE_CAPABILITY,          /* bDescriptorType */        \
+    USB_DEVICE_CAPABILITY_PLATFORM,                 /* bDevCapabilityType */     \
+    0x00,                                           /* bReserved */              \
+    0x38, 0xB6, 0x08, 0x34, 0xA9, 0x09, 0xA0, 0x47, /* PlatformCapabilityUUID */ \
+    0x8B, 0xFD, 0xA0, 0x76, 0x88, 0x15, 0xB6, 0x65,                              \
+    WBVAL(0x0100),                                  /* bcdVersion */             \
+    bVendorCode,                                    /* bVendorCode */            \
+    iLandingPage                                    /* iLandingPage */
+
+#define USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_INIT(bVendorCode, wMSOSDescriptorSetTotalLength) \
+    0x1C,                                           /* bLength */                \
+    USB_DESCRIPTOR_TYPE_DEVICE_CAPABILITY,          /* bDescriptorType */        \
+    USB_DEVICE_CAPABILITY_PLATFORM,                 /* bDevCapabilityType */     \
+    0x00,                                           /* bReserved */              \
+    0xDF, 0x60, 0xDD, 0xD8, 0x89, 0x45, 0xC7, 0x4C, /* PlatformCapabilityUUID */ \
+    0x9C, 0xD2, 0x65, 0x9D, 0x9E, 0x64, 0x8A, 0x9F,                              \
+    DBVAL(0x06030000),                              /* dwWindowsVersion */       \
+    WBVAL(wMSOSDescriptorSetTotalLength),           /* wMSOSDescriptorSetTotalLength */ \
+    bVendorCode,                                    /* bVendorCode */            \
+    0x00                                            /* bAltEnumCode */
+
+#define USB_BOS_CAP_PLATFORM_WEBUSB_DESCRIPTOR_LEN 24
+#define USB_BOS_CAP_PLATFORM_WINUSB_DESCRIPTOR_LEN 28
+
+#define USB_MSOSV1_STRING_DESCRIPTOR_INIT(vendor_code) \
+    0x12,                       /* bLength */                             \
+    USB_DESCRIPTOR_TYPE_STRING, /* bDescriptorType */                     \
+    'M', 0,                     /* bString[0] */                          \
+    'S', 0,                     /* bString[1] */                          \
+    'F', 0,                     /* bString[2] */                          \
+    'T', 0,                     /* bString[3] */                          \
+    '1', 0,                     /* bString[4] */                          \
+    '0', 0,                     /* bString[5] */                          \
+    '0', 0,                     /* bString[6] */                          \
+    vendor_code,                /* bMS_VendorCode */                      \
+    0x00                        /* bPad */
+
+#define USB_MSOSV1_COMP_ID_HEADER_DESCRIPTOR_INIT(bCount) \
+    DBVAL((sizeof(struct usb_msosv1_compat_id_header_descriptor) + sizeof(struct usb_msosv1_comp_id_function_descriptor) * bCount)), /* dwLength */ \
+    WBVAL(0x0100),            /* bcdVersion */                     \
+    WBVAL(0x0004),            /* wIndex */                         \
+    bCount,                   /* bCount */                         \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 /* reserved[7] */
+
+#define USB_MSOSV1_COMP_ID_FUNCTION_WINUSB_DESCRIPTOR_INIT(bFirstInterfaceNumber) \
+    bFirstInterfaceNumber,                          /* bFirstInterfaceNumber */\
+    0x01,                                           /* reserved1 */            \
+    'W', 'I', 'N', 'U', 'S', 'B', 0x00, 0x00,       /* compatibleID[8] */      \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* subCompatibleID[8] */   \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00              /* reserved2[6] */
+
+#define USB_MSOSV1_COMP_ID_FUNCTION_MTP_DESCRIPTOR_INIT(bFirstInterfaceNumber)\
+    bFirstInterfaceNumber,                          /* bFirstInterfaceNumber */\
+    0x01,                                           /* reserved1 */            \
+    'M', 'T', 'P', 0x00, 0x00, 0x00, 0x00, 0x00,    /* compatibleID[8] */      \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* subCompatibleID[8] */   \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00              /* reserved2[6] */
+
+#define USB_MSOSV1_COMP_ID_FUNCTION_ADB_DESCRIPTOR_INIT(bFirstInterfaceNumber)\
+    bFirstInterfaceNumber,                          /* bFirstInterfaceNumber */\
+    0x01,                                           /* reserved1 */            \
+    'A', 'D', 'B', 0x00, 0x00, 0x00, 0x00, 0x00,    /* compatibleID[8] */      \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* subCompatibleID[8] */   \
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00              /* reserved2[6] */
+
+#define USB_MSOSV1_COMP_ID_DESCRIPTOR_LEN(bCount) \
+    (sizeof(struct usb_msosv1_compat_id_header_descriptor) + sizeof(struct usb_msosv1_comp_id_function_descriptor) * (bCount))
+
+#define USB_MSOSV2_COMP_ID_SET_HEADER_DESCRIPTOR_INIT(wDescriptorSetTotalLength)   \
+    WBVAL(WINUSB_DESCRIPTOR_SET_HEADER_SIZE),               /* wLength */          \
+    WBVAL(WINUSB_SET_HEADER_DESCRIPTOR_TYPE),               /* wDescriptorType */  \
+    DBVAL(0x06030000),                                      /* dwWindowsVersion */ \
+    WBVAL(wDescriptorSetTotalLength)                        /* wDescriptorSetTotalLength */
+
+#define USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_SINGLE_DESCRIPTOR_INIT()                                           \
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_SIZE),  /* wLength */                                                  \
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_TYPE),  /* wDescriptorType */                                          \
+    'W', 'I', 'N', 'U', 'S', 'B', 0, 0,        /* CompatibleId*/                                              \
+    0, 0, 0, 0, 0, 0, 0, 0,                    /* SubCompatibleId*/                                           \
+    WBVAL(132),                                /* wLength */                                                  \
+    WBVAL(WINUSB_FEATURE_REG_PROPERTY_TYPE),   /* wDescriptorType */                                          \
+    WBVAL(WINUSB_PROP_DATA_TYPE_REG_SZ),       /* wPropertyDataType */                                        \
+    WBVAL(42),                                 /* wPropertyNameLength bPropertyName: "DeviceInterfaceGUID" */ \
+    'D', 0, 'e', 0, 'v', 0, 'i', 0, 'c', 0, 'e', 0,                                                           \
+    'I', 0, 'n', 0, 't', 0, 'e', 0, 'r', 0, 'f', 0, 'a', 0, 'c', 0, 'e', 0,                                   \
+    'G', 0, 'U', 0, 'I', 0, 'D', 0, 's', 0, 0, 0,                                                             \
+    WBVAL(80), /* wPropertyDataLength */                                                                      \
+    '{', 0,                                                                                                   \
+    'C', 0, 'D', 0, 'B', 0, '3', 0, 'B', 0, '5', 0, 'A', 0, 'D', 0, '-', 0,                                   \
+    '2', 0, '9', 0, '3', 0, 'B', 0, '-', 0,                                                                   \
+    '4', 0, '6', 0, '6', 0, '3', 0, '-', 0,                                                                   \
+    'A', 0, 'A', 0, '3', 0, '6', 0, '-',                                                                      \
+    0, '1', 0, 'A', 0, 'A', 0, 'E', 0, '4', 0, '6', 0, '4', 0, '6', 0, '3', 0, '7', 0, '7', 0, '6', 0,        \
+    '}', 0, 0, 0, 0, 0
+
+#define USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_SINGLE_DESCRIPTOR_LEN \
+    (WINUSB_FEATURE_COMPATIBLE_ID_SIZE + 132)
+
+#define USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_INIT(bFirstInterfaceNumber)                       \
+    WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE), /* wLength */                                                  \
+    WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE), /* wDescriptorType */                                          \
+    bFirstInterfaceNumber,                     /* bFirstInterface*/                                           \
+    0,                                         /* bReserved */                                                \
+    WBVAL((WINUSB_FUNCTION_SUBSET_HEADER_SIZE + WINUSB_FEATURE_COMPATIBLE_ID_SIZE + 132)), /* wSubsetLength */\
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_SIZE),  /* wLength */                                                  \
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_TYPE),  /* wDescriptorType */                                          \
+    'W', 'I', 'N', 'U', 'S', 'B', 0, 0,        /* CompatibleId*/                                              \
+    0, 0, 0, 0, 0, 0, 0, 0,                    /* SubCompatibleId*/                                           \
+    WBVAL(132),                                /* wLength */                                                  \
+    WBVAL(WINUSB_FEATURE_REG_PROPERTY_TYPE),   /* wDescriptorType */                                          \
+    WBVAL(WINUSB_PROP_DATA_TYPE_REG_MULTI_SZ), /* wPropertyDataType */                                        \
+    WBVAL(42),                                 /* wPropertyNameLength bPropertyName: "DeviceInterfaceGUID" */ \
+    'D', 0, 'e', 0, 'v', 0, 'i', 0, 'c', 0, 'e', 0,                                                           \
+    'I', 0, 'n', 0, 't', 0, 'e', 0, 'r', 0, 'f', 0, 'a', 0, 'c', 0, 'e', 0,                                   \
+    'G', 0, 'U', 0, 'I', 0, 'D', 0, 's', 0, 0, 0,                                                             \
+    WBVAL(80), /* wPropertyDataLength */                                                                      \
+    '{', 0,                                                                                                   \
+    'C', 0, 'D', 0, 'B', 0, '3', 0, 'B', 0, '5', 0, 'A', 0, 'D', 0, '-', 0,                                   \
+    '2', 0, '9', 0, '3', 0, 'B', 0, '-', 0,                                                                   \
+    '4', 0, '6', 0, '6', 0, '3', 0, '-', 0,                                                                   \
+    'A', 0, 'A', 0, '3', 0, '6', 0, '-',                                                                      \
+    0, '1', 0, 'A', 0, 'A', 0, 'E', 0, '4', 0, '6', 0, '4', 0, '6', 0, '3', 0, '7', 0, '7', 0, '6', 0,        \
+    '}', 0, 0, 0, 0, 0
+
+#define USB_MSOSV2_COMP_ID_FUNCTION_WINUSB_MULTI_DESCRIPTOR_LEN \
+    (WINUSB_FUNCTION_SUBSET_HEADER_SIZE + WINUSB_FEATURE_COMPATIBLE_ID_SIZE + 132)
+
 // clang-format on
 
 #endif /* USB_DEF_H */

@@ -20,18 +20,14 @@
 #define CONFIG_USB_OSAL_THREAD_SET_ARGV void *argument
 #define CONFIG_USB_OSAL_THREAD_GET_ARGV ((uintptr_t)argument)
 #endif
-#define USB_OSAL_WAITING_FOREVER (0xFFFFFFFFU)
 
-#define USB_OSAL_EVENT_FLAG_AND      (1 << 0)
-#define USB_OSAL_EVENT_FLAG_OR       (1 << 1)
-#define USB_OSAL_EVENT_FLAG_CLEAR    (1 << 2)
+#define USB_OSAL_WAITING_FOREVER (0xFFFFFFFFU)
 
 typedef void *usb_osal_thread_t;
 typedef void *usb_osal_sem_t;
 typedef void *usb_osal_mutex_t;
-typedef void *usb_osal_event_t;
 typedef void *usb_osal_mq_t;
-typedef void (*usb_thread_entry_t)(void *argument);
+typedef void (*usb_thread_entry_t)(CONFIG_USB_OSAL_THREAD_SET_ARGV);
 typedef void (*usb_timer_handler_t)(void *argument);
 struct usb_osal_timer {
     usb_timer_handler_t handler;
@@ -49,6 +45,7 @@ void usb_osal_thread_delete(usb_osal_thread_t thread);
 void usb_osal_thread_schedule_other(void);
 
 usb_osal_sem_t usb_osal_sem_create(uint32_t initial_count);
+usb_osal_sem_t usb_osal_sem_create_counting(uint32_t max_count);
 void usb_osal_sem_delete(usb_osal_sem_t sem);
 int usb_osal_sem_take(usb_osal_sem_t sem, uint32_t timeout);
 int usb_osal_sem_give(usb_osal_sem_t sem);
@@ -64,13 +61,6 @@ void usb_osal_mq_delete(usb_osal_mq_t mq);
 int usb_osal_mq_send(usb_osal_mq_t mq, uintptr_t addr);
 int usb_osal_mq_recv(usb_osal_mq_t mq, uintptr_t *addr, uint32_t timeout);
 
-
-usb_osal_event_t usb_osal_event_creat(const char *name);
-void usb_osal_event_delete(usb_osal_event_t event);
-int usb_osal_event_send(usb_osal_event_t event, uint32_t set);
-int usb_osal_event_recv(usb_osal_event_t event, uint32_t  set, uint8_t option,
-                        int32_t timeout, uint32_t *recved);
-
 struct usb_osal_timer *usb_osal_timer_create(const char *name, uint32_t timeout_ms, usb_timer_handler_t handler, void *argument, bool is_period);
 void usb_osal_timer_delete(struct usb_osal_timer *timer);
 void usb_osal_timer_start(struct usb_osal_timer *timer);
@@ -81,8 +71,7 @@ void usb_osal_leave_critical_section(size_t flag);
 
 void usb_osal_msleep(uint32_t delay);
 
-void *usb_osal_malloc_align(uint32_t mem_type, size_t size, size_t align);
-void usb_osal_free_align(uint32_t mem_type, void *mem);
 void *usb_osal_malloc(size_t size);
 void usb_osal_free(void *ptr);
+
 #endif /* USB_OSAL_H */

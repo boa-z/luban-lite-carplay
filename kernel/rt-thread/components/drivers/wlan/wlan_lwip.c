@@ -57,7 +57,6 @@ static void netif_is_ready(struct rt_work *work, void *parameter)
     struct rt_wlan_device *wlan = parameter;
     struct lwip_prot_des *lwip_prot = (struct lwip_prot_des *)wlan->prot;
     struct eth_device *eth_dev;
-    rt_base_t level;
     struct rt_wlan_buff buff;
     rt_uint32_t ip_addr[4];
     char str[IPADDR_STRLEN_MAX];
@@ -65,8 +64,20 @@ static void netif_is_ready(struct rt_work *work, void *parameter)
     if (lwip_prot == RT_NULL)
         return;
 
+    /*
+     * rt_wlan_lwip_protocol_unregister() sets wlan->prot to NULL before it
+     * cancels this work and frees the descriptor.  We may have read the
+     * pointer just before that, so re-validate it before touching (or
+     * restarting) the embedded timer: restarting a timer that belongs to a
+     * freed descriptor would leave a dangling node in the kernel Timer
+     * object list, which later faults the timer thread.
+     */
+    if (wlan->prot != (struct rt_wlan_prot *)lwip_prot)
+        return;
+
     eth_dev = &lwip_prot->eth;
     rt_timer_stop(&lwip_prot->timer);
+
     if (ip_addr_cmp(&(eth_dev->netif->ip_addr), &ip_addr_zero) != 0)
     {
         rt_timer_start(&lwip_prot->timer);
@@ -103,7 +114,8 @@ static void netif_is_ready(struct rt_work *work, void *parameter)
 #endif
     if (rt_wlan_prot_ready(wlan, &buff) != 0)
     {
-        rt_timer_start(&lwip_prot->timer);
+        if (wlan->prot == (struct rt_wlan_prot *)lwip_prot)
+            rt_timer_start(&lwip_prot->timer);
         goto exit;
     }
     rt_memset(str, 0, IPADDR_STRLEN_MAX);
@@ -112,12 +124,12 @@ static void netif_is_ready(struct rt_work *work, void *parameter)
     rt_exit_critical();
     LOG_I("Got IP address : %s", str);
 exit:
-    level = rt_hw_interrupt_disable();
-    if (work)
-    {
-        rt_memset(work, 0, sizeof(struct rt_work));
-    }
-    rt_hw_interrupt_enable(level);
+    /*
+     * Do not clear the work here: this descriptor's work is re-initialized
+     * with rt_work_init() before every submit, and zeroing it raced with
+     * rt_wlan_lwip_protocol_unregister() when the protocol was detached.
+     */
+    (void)work;
 }
 
 static void timer_callback(void *parameter)
@@ -558,6 +570,23 @@ static void rt_wlan_lwip_protocol_unregister(struct rt_wlan_prot *prot, struct r
         return;
     }
 
+    /*
+     * netif_is_ready() runs from the WLAN workqueue and restarts
+     * lwip_prot->timer when the netif has no IP yet.  Cancel it and wait for
+     * it to finish before detaching the timer: otherwise a work that was
+     * already running can restart the timer after the detach and before the
+     * descriptor is freed, leaving a dangling node in the kernel Timer
+     * object list once the heap block is reused as a thread stack.
+     */
+#ifdef RT_WLAN_WORK_THREAD_ENABLE
+    {
+        struct rt_workqueue *workqueue = rt_wlan_get_workqueue();
+
+        if (workqueue != RT_NULL)
+            rt_workqueue_cancel_work_sync(workqueue, &lwip_prot->work);
+    }
+#endif
+
 #ifdef LWIP_USING_DHCPD
     {
         char netif_name[RT_NAME_MAX];
@@ -568,6 +597,7 @@ static void rt_wlan_lwip_protocol_unregister(struct rt_wlan_prot *prot, struct r
 #endif
     eth_device_deinit(&lwip_prot->eth);
     rt_device_close((rt_device_t)wlan);
+    rt_timer_stop(&lwip_prot->timer);
     rt_timer_detach(&lwip_prot->timer);
     wlan->netdev = RT_NULL;
     rt_free(lwip_prot);

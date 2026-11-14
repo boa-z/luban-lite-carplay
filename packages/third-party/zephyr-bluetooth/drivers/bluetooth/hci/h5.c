@@ -98,6 +98,13 @@ struct h5_data {
 
 	struct k_sem        setup_ready;
 
+	/* This port calls bt_uart_isr from bt_uart_wq, not hard IRQ context.
+	 * Serialize complete UART frames and reliable-window state across RX,
+	 * TX, setup and delayed ACK/retransmission work. Never call recv while held.
+	 */
+	struct k_mutex lock;
+	bool rx_escaped;
+
 	struct k_work_delayable ack_work;
 	struct k_work_delayable retx_work;
 
@@ -121,6 +128,7 @@ struct h5_data {
 	}			rx_state;
 
 	uint8_t unack_queue_len;
+	uint32_t rx_sequence_retries;
 };
 
 struct h5_config {
@@ -155,82 +163,65 @@ static void h5_reset_rx(struct h5_data *h5)
 	}
 
 	h5->rx_state = START;
+	h5->rx_escaped = false;
 }
 
-static int h5_unslip_byte(struct rt_device *uart, uint8_t *byte)
+/* Preserve escape state across UART work invocations; never spin waiting for
+ * the next byte (it may arrive after this invocation returns).
+ */
+static int h5_unslip_byte(struct h5_data *h5, uint8_t *byte)
 {
-	int count;
-
-	if (*byte != SLIP_ESC) {
+	if (!h5->rx_escaped) {
+		if (*byte == SLIP_ESC) {
+			h5->rx_escaped = true;
+			return 1;
+		}
 		return 0;
 	}
 
-	do {
-		count = uart_fifo_read(uart, byte, sizeof(*byte));
-	} while (!count);
-
+	h5->rx_escaped = false;
 	switch (*byte) {
 	case SLIP_ESC_DELIM:
 		*byte = SLIP_DELIMITER;
-		break;
+		return 0;
 	case SLIP_ESC_ESC:
 		*byte = SLIP_ESC;
-		break;
+		return 0;
 	default:
-		LOG_ERR("Invalid escape byte %x\n", *byte);
 		return -EIO;
 	}
-
-	return 0;
 }
 
+/* Caller holds lock. ACK is the next sequence expected by the controller. */
 static void process_unack(struct h5_data *h5)
 {
-	uint8_t next_seq = h5->tx_seq;
-	uint8_t number_removed = h5->unack_queue_len;
+	uint8_t oldest = (h5->tx_seq - h5->unack_queue_len) & 0x07;
+	uint8_t acknowledged = (h5->rx_ack - oldest) & 0x07;
 
-	if (!h5->unack_queue_len) {
+	/* A stale/out-of-window ACK must never free unsent or unacknowledged data.
+	 * Bound the calculation: the old reverse scan could underflow forever.
+	 */
+	if (acknowledged > h5->unack_queue_len) {
+		LOG_WRN("H5 ACK outside window: ack=%u oldest=%u pending=%u",
+			h5->rx_ack, oldest, h5->unack_queue_len);
 		return;
 	}
 
-	LOG_DBG("rx_ack %u tx_ack %u tx_seq %u unack_queue_len %u", h5->rx_ack, h5->tx_ack,
-		h5->tx_seq, h5->unack_queue_len);
-
-	while (h5->unack_queue_len > 0) {
-		if (next_seq == h5->rx_ack) {
-			/* Next sequence number is the same as last received
-			 * ack number
-			 */
-			break;
-		}
-
-		number_removed--;
-		/* Similar to (n - 1) % 8 with unsigned conversion */
-		next_seq = (next_seq - 1) & 0x07;
-	}
-
-	if (next_seq != h5->rx_ack) {
-		LOG_ERR("Wrong sequence: rx_ack %u tx_seq %u next_seq %u", h5->rx_ack,
-			h5->tx_seq, next_seq);
-	}
-
-	LOG_DBG("Need to remove %u packet from the queue", number_removed);
-
-	while (number_removed) {
+	while (acknowledged--) {
 		struct net_buf *buf = k_fifo_get(&h5->unack_queue, K_NO_WAIT);
 
-		if (!buf) {
-			LOG_ERR("Unack queue is empty");
-			break;
-		}
-
-		/* TODO: print or do something with packet */
-		LOG_DBG("Remove buf from the unack_queue");
-
-		net_buf_unref(buf);
+		__ASSERT_NO_MSG(buf != NULL);
 		h5->unack_queue_len--;
-		number_removed--;
+		net_buf_unref(buf);
 	}
+
+	if (!h5->unack_queue_len) {
+		(void)k_work_cancel_delayable(&h5->retx_work);
+	}
+	/* ACK opens the window. TX drains all available slots, even when several
+	 * producer notifications have coalesced in the binary semaphore.
+	 */
+	k_sem_give(&h5->tx_ready);
 }
 
 static void h5_print_header(const uint8_t *hdr, const char *str)
@@ -296,7 +287,7 @@ static uint8_t h5_slip_byte(struct rt_device *uart, uint8_t byte)
 	}
 }
 
-static void h5_send(struct device *dev, const uint8_t *payload, uint8_t type, int len)
+static void h5_send_locked(const struct device *dev, const uint8_t *payload, uint8_t type, int len)
 {
 	const struct h5_config *cfg = dev->config;
 	struct h5_data *h5 = dev->data;
@@ -339,40 +330,39 @@ static void h5_send(struct device *dev, const uint8_t *payload, uint8_t type, in
 	uart_poll_out(cfg->uart, SLIP_DELIMITER);
 }
 
-/* Delayed work taking care about retransmitting packets */
+static void h5_send(const struct device *dev, const uint8_t *payload, uint8_t type, int len)
+{
+	struct h5_data *h5 = dev->data;
+
+	k_mutex_lock(&h5->lock, K_FOREVER);
+	h5_send_locked(dev, payload, type, len);
+	k_mutex_unlock(&h5->lock);
+}
+
+/* Retransmit the outstanding window in place, with its original sequence
+ * numbers. Do not mix it with newly queued commands or temporarily surrender
+ * buffer ownership to TX: ACK processing must see a consistent window.
+ */
 static void retx_timeout(struct k_work *work)
 {
 	struct k_work_delayable *delayable = k_work_delayable_from_work(work);
 	struct h5_data *h5 = CONTAINER_OF(delayable, struct h5_data, retx_work);
 
-	LOG_DBG("unack_queue_len %u", h5->unack_queue_len);
+	k_mutex_lock(&h5->lock, K_FOREVER);
+	uint8_t pending = h5->unack_queue_len;
 
-	if (h5->unack_queue_len) {
-		struct k_fifo tmp_queue;
-		struct net_buf *buf;
+	h5->tx_seq = (h5->tx_seq - pending) & 0x07;
+	for (uint8_t i = 0; i < pending; i++) {
+		struct net_buf *buf = k_fifo_get(&h5->unack_queue, K_NO_WAIT);
 
-		k_fifo_init(&tmp_queue);
-
-		/* Queue to temporary queue */
-		while ((buf = k_fifo_get(&h5->tx_queue, K_NO_WAIT))) {
-			k_fifo_put(&tmp_queue, buf);
-		}
-
-		/* Queue unack packets to the beginning of the queue */
-		while ((buf = k_fifo_get(&h5->unack_queue, K_NO_WAIT))) {
-			/* include also packet type */
-			net_buf_push(buf, sizeof(uint8_t));
-			k_fifo_put(&h5->tx_queue, buf);
-			h5->tx_seq = (h5->tx_seq - 1) & 0x07;
-			h5->unack_queue_len--;
-		}
-
-		/* Queue saved packets from temp queue */
-		while ((buf = k_fifo_get(&tmp_queue, K_NO_WAIT))) {
-			k_fifo_put(&h5->tx_queue, buf);
-		}
-	    k_sem_give(&h5->tx_ready);
+		__ASSERT_NO_MSG(buf != NULL);
+		h5_send_locked(h5->dev, buf->data + 1, buf->data[0], buf->len - 1);
+		k_fifo_put(&h5->unack_queue, buf);
 	}
+	if (pending) {
+		k_work_reschedule(&h5->retx_work, H5_TX_ACK_TIMEOUT);
+	}
+	k_mutex_unlock(&h5->lock);
 }
 
 static void ack_timeout(struct k_work *work)
@@ -385,17 +375,18 @@ static void ack_timeout(struct k_work *work)
 	h5_send(h5->dev, NULL, HCI_3WIRE_ACK_PKT, 0);
 }
 
-static void h5_process_complete_packet(struct device *dev, uint8_t *hdr)
+static void h5_process_complete_packet(const struct device *dev, uint8_t *hdr)
 {
 	struct h5_data *h5 = dev->data;
 	struct net_buf *buf;
 
 	LOG_DBG("");
 
+	k_mutex_lock(&h5->lock, K_FOREVER);
 	/* rx_ack should be in every packet */
 	h5->rx_ack = H5_HDR_ACK(hdr);
 
-	if (reliable_packet(H5_HDR_PKT_TYPE(hdr))) {
+	if (H5_HDR_RELIABLE(hdr)) {
 		/* For reliable packet increment next transmit ack number */
 		h5->tx_ack = (h5->tx_ack + 1) % 8;
 		/* Submit delayed work to ack the packet */
@@ -405,6 +396,7 @@ static void h5_process_complete_packet(struct device *dev, uint8_t *hdr)
 	h5_print_header(hdr, "RX: >");
 
 	process_unack(h5);
+	k_mutex_unlock(&h5->lock);
 
 	buf = h5->rx_buf;
 	h5->rx_buf = NULL;
@@ -472,12 +464,16 @@ static void bt_uart_isr(const struct rt_device *uart, void *user_data)
 			 * with starting one.
 			 */
 			if (byte == SLIP_DELIMITER) {
+				h5->rx_escaped = false;
 				remaining = sizeof(hdr);
 				continue;
 			}
 
-			if (h5_unslip_byte(uart, &byte) < 0) {
-				h5_reset_rx(h5);
+			ret = h5_unslip_byte(h5, &byte);
+			if (ret) {
+				if (ret < 0) {
+					h5_reset_rx(h5);
+				}
 				continue;
 			}
 
@@ -488,7 +484,25 @@ static void bt_uart_isr(const struct rt_device *uart, void *user_data)
 				break;
 			}
 
+			if ((uint8_t)(hdr[0] + hdr[1] + hdr[2] + hdr[3]) != 0xff ||
+			    H5_HDR_CRC(hdr) ||
+			    H5_HDR_RELIABLE(hdr) != reliable_packet(H5_HDR_PKT_TYPE(hdr))) {
+				LOG_WRN("Invalid H5 header");
+				h5_reset_rx(h5);
+				continue;
+			}
 			remaining = H5_HDR_LEN(hdr);
+			if ((H5_HDR_PKT_TYPE(hdr) == HCI_EVENT_PKT && remaining < 2) ||
+			    ((H5_HDR_PKT_TYPE(hdr) == HCI_ACLDATA_PKT ||
+			      H5_HDR_PKT_TYPE(hdr) == HCI_ISODATA_PKT) && remaining < 4) ||
+			    (H5_HDR_PKT_TYPE(hdr) == HCI_3WIRE_ACK_PKT && remaining != 0) ||
+			    (H5_HDR_PKT_TYPE(hdr) == HCI_3WIRE_LINK_PKT &&
+			     (remaining < 2 || remaining > MAX_SIG_LEN))) {
+				LOG_WRN("Invalid H5 payload length %u type=%u", remaining,
+					H5_HDR_PKT_TYPE(hdr));
+				h5_reset_rx(h5);
+				continue;
+			}
 
 			switch (H5_HDR_PKT_TYPE(hdr)) {
 			case HCI_EVENT_PKT:
@@ -531,16 +545,25 @@ static void bt_uart_isr(const struct rt_device *uart, void *user_data)
 				break;
 			default:
 				LOG_ERR("Wrong packet type %u", H5_HDR_PKT_TYPE(hdr));
-				h5->rx_state = END;
-				break;
+				h5_reset_rx(h5);
+				continue;
 			}
 			if (!remaining) {
 				h5->rx_state = END;
 			}
 			break;
 		case PAYLOAD:
-			if (h5_unslip_byte(uart, &byte) < 0) {
+			if (byte == SLIP_DELIMITER) {
 				h5_reset_rx(h5);
+				h5->rx_state = HEADER;
+				remaining = sizeof(hdr);
+				continue;
+			}
+			ret = h5_unslip_byte(h5, &byte);
+			if (ret) {
+				if (ret < 0) {
+					h5_reset_rx(h5);
+				}
 				continue;
 			}
 
@@ -585,8 +608,20 @@ static void bt_uart_isr(const struct rt_device *uart, void *user_data)
 			 */
 			if (H5_HDR_RELIABLE(hdr) &&
 			    H5_HDR_SEQ(hdr) != h5->tx_ack) {
-				LOG_ERR("Seq expected %u got %u. Drop packet", h5->tx_ack,
-					H5_HDR_SEQ(hdr));
+				/* Retransmissions are expected after a lost ACK. Re-ACK the
+				 * last accepted sequence without delivering HCI data twice.
+				 * A valid frame still carries a useful peer ACK.
+				 */
+				k_mutex_lock(&h5->lock, K_FOREVER);
+				h5->rx_sequence_retries++;
+				if ((h5->rx_sequence_retries & (h5->rx_sequence_retries - 1)) == 0) {
+					LOG_WRN("H5 sequence retry: expected=%u got=%u count=%u; re-ACK",
+						h5->tx_ack, H5_HDR_SEQ(hdr), h5->rx_sequence_retries);
+				}
+				h5->rx_ack = H5_HDR_ACK(hdr);
+				process_unack(h5);
+				k_work_reschedule(&h5->ack_work, K_NO_WAIT);
+				k_mutex_unlock(&h5->lock);
 				h5_reset_rx(h5);
 				break;
 			}
@@ -596,11 +631,6 @@ static void bt_uart_isr(const struct rt_device *uart, void *user_data)
 			break;
 		}
 	}
-}
-
-static uint8_t h5_get_type(struct net_buf *buf)
-{
-	return net_buf_pull_u8(buf);
 }
 
 static int h5_queue(const struct device *dev, struct net_buf *buf)
@@ -636,31 +666,27 @@ static void tx_thread(void *p1, void *p2, void *p3)
 
 		k_sem_take(&h5->tx_ready, K_FOREVER);
 
-		switch (h5->link_state) {
-		case UNINIT:
-			/* FIXME: send sync */
-			k_sleep(K_MSEC(100));
-			break;
-		case INIT:
-			/* FIXME: send conf */
-			k_sleep(K_MSEC(100));
-			break;
-		case ACTIVE:
-			buf = k_fifo_get(&h5->tx_queue, K_NO_WAIT);
-			type = h5_get_type(buf);
+		k_mutex_lock(&h5->lock, K_FOREVER);
+		while (h5->link_state == ACTIVE &&
+		       h5->unack_queue_len < h5->tx_win &&
+		       (buf = k_fifo_get(&h5->tx_queue, K_NO_WAIT)) != NULL) {
+			type = buf->data[0];
+			if (reliable_packet(type)) {
+				bool first = h5->unack_queue_len == 0;
 
-			h5_send(dev, buf->data, type, buf->len);
-
-			/* buf is dequeued from tx_queue and queued to unack
-			 * queue.
-			 */
-			k_fifo_put(&h5->unack_queue, buf);
-			h5->unack_queue_len++;
-
-			k_work_reschedule(&h5->retx_work, H5_TX_ACK_TIMEOUT);
-
-			break;
+				k_fifo_put(&h5->unack_queue, buf);
+				h5->unack_queue_len++;
+				h5_send_locked(h5->dev, buf->data + 1, type, buf->len - 1);
+				/* New traffic must not postpone retransmission of the oldest. */
+				if (first) {
+					k_work_reschedule(&h5->retx_work, H5_TX_ACK_TIMEOUT);
+				}
+			} else {
+				h5_send_locked(h5->dev, buf->data + 1, type, buf->len - 1);
+				net_buf_unref(buf);
+			}
 		}
+		k_mutex_unlock(&h5->lock);
 	}
 }
 
@@ -687,12 +713,18 @@ static void rx_thread(void *p1, void *p2, void *p3)
 
 		hexdump("=> ", buf->data, buf->len);
 
+		k_mutex_lock(&h5->lock, K_FOREVER);
+		if (buf->len < 2) {
+			k_mutex_unlock(&h5->lock);
+			net_buf_unref(buf);
+			continue;
+		}
 		if (!memcmp(buf->data, sync_req, sizeof(sync_req))) {
 			if (h5->link_state == ACTIVE) {
 				/* TODO Reset H5 */
 			}
 
-			h5_send(dev, sync_rsp, HCI_3WIRE_LINK_PKT, sizeof(sync_rsp));
+			h5_send_locked(dev, sync_rsp, HCI_3WIRE_LINK_PKT, sizeof(sync_rsp));
 		} else if (!memcmp(buf->data, sync_rsp, sizeof(sync_rsp))) {
 			if (h5->link_state == ACTIVE) {
 				/* TODO Reset H5 */
@@ -700,30 +732,34 @@ static void rx_thread(void *p1, void *p2, void *p3)
 
 			h5->link_state = INIT;
 			h5_set_txwin(h5, conf_req);
-			h5_send(dev, conf_req, HCI_3WIRE_LINK_PKT, sizeof(conf_req));
+			h5_send_locked(dev, conf_req, HCI_3WIRE_LINK_PKT, sizeof(conf_req));
 		} else if (!memcmp(buf->data, conf_req, 2)) {
 			/*
 			 * The Host sends Config Response messages without a
 			 * Configuration Field.
 			 */
-			h5_send(dev, conf_rsp, HCI_3WIRE_LINK_PKT, sizeof(conf_rsp));
+			h5_send_locked(dev, conf_rsp, HCI_3WIRE_LINK_PKT, sizeof(conf_rsp));
 
 			/* Then send Config Request with Configuration Field */
 			h5_set_txwin(h5, conf_req);
-			h5_send(dev, conf_req, HCI_3WIRE_LINK_PKT, sizeof(conf_req));
+			h5_send_locked(dev, conf_req, HCI_3WIRE_LINK_PKT, sizeof(conf_req));
 		} else if (!memcmp(buf->data, conf_rsp, 2)) {
 			h5->link_state = ACTIVE;
 			if (buf->len > 2) {
 				/* Configuration field present */
-				h5->tx_win = (buf->data[2] & 0x07);
+				uint8_t window = buf->data[2] & 0x07;
+				/* Never exceed our requested window, nor accept a zero window. */
+				h5->tx_win = window ? MIN(window, 4U) : 1U;
 			}
 	        k_sem_give(&h5->setup_ready);
+			k_sem_give(&h5->tx_ready);
 
 			LOG_DBG("Finished H5 configuration, tx_win %u", h5->tx_win);
 		} else {
 			LOG_ERR("Not handled yet %x %x", buf->data[0], buf->data[1]);
 		}
 
+		k_mutex_unlock(&h5->lock);
 		net_buf_unref(buf);
 
 		/* Make sure we don't hog the CPU if the rx_queue never
@@ -741,9 +777,11 @@ static void h5_init(const struct device *dev)
 
 	LOG_DBG("");
 
+	k_mutex_init(&h5->lock);
 	h5->link_state = UNINIT;
 	h5->rx_state = START;
 	h5->tx_win = 4U;
+	LOG_INF("H5 transport: serialized frames, bounded window, in-place retransmission");
 
 	/* Init delayed work */
 	k_work_init_delayable(&h5->ack_work, ack_timeout);

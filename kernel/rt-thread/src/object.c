@@ -316,6 +316,102 @@ int rt_object_get_pointers(enum rt_object_class_type type, rt_object_t *pointers
 }
 RTM_EXPORT(rt_object_get_pointers);
 
+/*
+ * Object list integrity guard and lightweight operation trace.
+ *
+ * A timer object that is freed while it is still linked in the kernel object
+ * list leaves a dangling list node behind.  When the heap block is reused as
+ * a thread stack, rt_hw_stack_init() fills the top of the stack with
+ * 0xdeadbeef, so the linked node's "next" pointer becomes 0xdeadbeef.  The
+ * next rt_object_init() then walks that list and takes a load access fault
+ * inside the duplicate-check loop.  RT_ASSERT() is compiled out in release
+ * builds, so there is no earlier warning.
+ *
+ * The D21 CarPlay bring-up hit exactly this after the soft-AP had started
+ * (the periodic STA auto-connect work timer).  Keep a short ring of object
+ * lifetime events and use it to report the broken node instead of faulting,
+ * then reset the (already unusable) list head so the system keeps running.
+ */
+#define RT_OBJECT_TRACE_N       128
+
+struct rt_object_trace
+{
+    rt_tick_t             tick;
+    struct rt_object     *object;
+    struct rt_list_node  *next;
+    struct rt_list_node  *prev;
+    const char           *op;
+    char                  name[RT_NAME_MAX];
+};
+
+static struct rt_object_trace _object_trace[RT_OBJECT_TRACE_N];
+static rt_uint16_t            _object_trace_pos;
+
+static void _object_trace_name(char *dst, const char *src)
+{
+    int i;
+
+    for (i = 0; i < RT_NAME_MAX - 1; i++)
+    {
+        char c = src[i];
+
+        if (c == '\0')
+            break;
+        dst[i] = (c >= 0x20 && c < 0x7f) ? c : '.';
+    }
+    dst[i] = '\0';
+}
+
+static void _object_trace_add(struct rt_object *object, const char *op)
+{
+    struct rt_object_trace *e;
+    rt_base_t level;
+
+    if (object == RT_NULL)
+        return;
+
+    level = rt_hw_interrupt_disable();
+    e = &_object_trace[_object_trace_pos];
+    e->tick   = rt_tick_get();
+    e->object = object;
+    e->next   = object->list.next;
+    e->prev   = object->list.prev;
+    e->op     = op;
+    _object_trace_name(e->name, object->name);
+    _object_trace_pos = (_object_trace_pos + 1) % RT_OBJECT_TRACE_N;
+    rt_hw_interrupt_enable(level);
+}
+
+static void _object_trace_dump(void)
+{
+    struct rt_object_trace *e;
+    unsigned int i;
+
+    rt_kprintf("[OBJ] last %d object operations (oldest first):\n",
+               RT_OBJECT_TRACE_N);
+    for (i = 0; i < RT_OBJECT_TRACE_N; i++)
+    {
+        e = &_object_trace[(_object_trace_pos + i) % RT_OBJECT_TRACE_N];
+        if (e->object == RT_NULL)
+            continue;
+        rt_kprintf("[OBJ]  t=%-10u %-6s obj=%p next=%p prev=%p name='%s'\n",
+                   e->tick, e->op, e->object, e->next, e->prev, e->name);
+    }
+}
+
+/*
+ * A list link is usable only if it is aligned and not NULL.  This port sets
+ * RT_ALIGN_SIZE to 4, so heap-allocated objects (thread TCBs and their
+ * embedded thread_timer) are legitimately only 4-byte aligned even on
+ * RV64; do not require sizeof(void *) alignment here.  The corruption we
+ * are looking for (thread stack fill 0xdeadbeef) is not 4-byte aligned.
+ */
+static rt_bool_t _object_list_link_ok(struct rt_list_node *link)
+{
+    return (link != RT_NULL) &&
+           ((((rt_ubase_t)link) % RT_ALIGN_SIZE) == 0);
+}
+
 /**
  * @brief This function will initialize an object and add it to object system
  *        management.
@@ -332,6 +428,8 @@ void rt_object_init(struct rt_object         *object,
 {
     rt_base_t level;
     struct rt_list_node *node = RT_NULL;
+    struct rt_list_node *bad_node = RT_NULL;
+    struct rt_list_node *bad_next = RT_NULL;
     struct rt_object_information *information;
 #ifdef RT_USING_MODULE
     struct rt_dlmodule *module = dlmodule_self();
@@ -352,14 +450,70 @@ void rt_object_init(struct rt_object         *object,
     {
         struct rt_object *obj;
 
+        /* never dereference a corrupted node: report it instead */
+        if (!_object_list_link_ok(node))
+        {
+            bad_node = node;
+            break;
+        }
+
         obj = rt_list_entry(node, struct rt_object, list);
+
+        /* the node itself is readable, check its forward link as well */
+        if (!_object_list_link_ok(obj->list.next))
+        {
+            bad_node = &(obj->list);
+            bad_next = obj->list.next;
+            break;
+        }
+
         if (obj) /* skip warning when disable debug */
         {
             RT_ASSERT(obj != object);
         }
     }
+
+    if (bad_node != RT_NULL)
+    {
+        /*
+         * Heal the head while still in the critical section: another thread
+         * may create a timer at any moment and would otherwise walk the
+         * same broken list.  Report it after the list is usable again.
+         */
+        rt_list_init(&(information->object_list));
+    }
     /* leave critical */
     rt_exit_critical();
+
+    if (bad_node != RT_NULL)
+    {
+        char bad_name[RT_NAME_MAX] = { 0 };
+
+        if (bad_next != RT_NULL)
+        {
+            struct rt_object *bad_obj =
+                    rt_list_entry(bad_node, struct rt_object, list);
+
+            _object_trace_name(bad_name, bad_obj->name);
+            rt_kprintf("[OBJ] corrupt %s list: node=%p name='%s' "
+                       "next=%p (expected a pointer), prev=%p\n",
+                       type == RT_Object_Class_Timer ? "timer" : "object",
+                       bad_node, bad_name, bad_next, bad_obj->list.prev);
+            _object_trace_dump();
+        }
+        else
+        {
+            rt_kprintf("[OBJ] corrupt %s list: misaligned node=%p "
+                       "(cannot dereference)\n",
+                       type == RT_Object_Class_Timer ? "timer" : "object",
+                       bad_node);
+            _object_trace_dump();
+        }
+
+        rt_kprintf("[OBJ] class %d object list reset to empty; "
+                   "rerun the failing operation to collect a new trace\n",
+                   (int)information->type);
+    }
 
     /* initialize object's parameters */
     /* set object type to static */
@@ -387,6 +541,8 @@ void rt_object_init(struct rt_object         *object,
 
     /* unlock interrupt */
     rt_hw_interrupt_enable(level);
+
+    _object_trace_add(object, "init");
 }
 
 /**
@@ -404,11 +560,26 @@ void rt_object_detach(rt_object_t object)
 
     RT_OBJECT_HOOK_CALL(rt_object_detach_hook, (object));
 
+    _object_trace_add(object, "detach");
+
     /* reset object type */
     object->type = 0;
 
     /* lock interrupt */
     level = rt_hw_interrupt_disable();
+
+    if (!_object_list_link_ok(object->list.next) ||
+        !_object_list_link_ok(object->list.prev))
+    {
+        char name[RT_NAME_MAX] = { 0 };
+
+        _object_trace_name(name, object->name);
+        rt_hw_interrupt_enable(level);
+        rt_kprintf("[OBJ] detach of '%s' (%p) has broken links "
+                   "next=%p prev=%p; list left untouched\n",
+                   name, object, object->list.next, object->list.prev);
+        return;
+    }
 
     /* remove from old list */
     rt_list_remove(&(object->list));
@@ -503,17 +674,33 @@ void rt_object_delete(rt_object_t object)
 
     RT_OBJECT_HOOK_CALL(rt_object_detach_hook, (object));
 
+    _object_trace_add(object, "delete");
+
     /* reset object type */
     object->type = RT_Object_Class_Null;
 
     /* lock interrupt */
     level = rt_hw_interrupt_disable();
 
-    /* remove from old list */
-    rt_list_remove(&(object->list));
+    if (!_object_list_link_ok(object->list.next) ||
+        !_object_list_link_ok(object->list.prev))
+    {
+        char name[RT_NAME_MAX] = { 0 };
 
-    /* unlock interrupt */
-    rt_hw_interrupt_enable(level);
+        _object_trace_name(name, object->name);
+        rt_hw_interrupt_enable(level);
+        rt_kprintf("[OBJ] delete of '%s' (%p) has broken links "
+                   "next=%p prev=%p; list left untouched\n",
+                   name, object, object->list.next, object->list.prev);
+    }
+    else
+    {
+        /* remove from old list */
+        rt_list_remove(&(object->list));
+
+        /* unlock interrupt */
+        rt_hw_interrupt_enable(level);
+    }
 
     /* free the memory of object */
     RT_KERNEL_FREE(object);

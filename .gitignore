@@ -26,4 +26,8 @@ packages/pkgs.json
 .commit
 .editorconfig
 .gitattributes
+/.ci-venv/
+**/pack/.image_cfg.json.tmp
+**/pack/bootloader_upgrade.bin
+packages/third-party/mbedtls/ports/src/tls_certificate.c
 

@@ -609,6 +609,22 @@
 #define LWIP_NETIF_API                  1
 #endif
 
+/*
+ * Multicast DNS responder (Bonjour).  CarPlay wireless discovery needs it.
+ * The RT-Thread lwIP 2.1.2 SConscript adds src/apps/mdns/mdns.c; this macro
+ * makes the code active.  LWIP_NUM_NETIF_CLIENT_DATA is required for the
+ * per-netif mDNS state.
+ */
+#ifndef LWIP_MDNS_RESPONDER
+#define LWIP_MDNS_RESPONDER             1
+#endif
+#ifndef LWIP_NUM_NETIF_CLIENT_DATA
+#define LWIP_NUM_NETIF_CLIENT_DATA      1
+#endif
+#ifndef MDNS_MAX_SERVICES
+#define MDNS_MAX_SERVICES               4
+#endif
+
 /* MEMP_NUM_SYS_TIMEOUT: the number of simulateously active timeouts. */
 #define MEMP_NUM_SYS_TIMEOUT       (LWIP_TCP + IP_REASSEMBLY + LWIP_ARP + (2 * LWIP_DHCP) + LWIP_AUTOIP + LWIP_IGMP + LWIP_DNS + PPP_SUPPORT + (LWIP_IPV6 ? (1 + (2 * LWIP_IPV6)) : 0))
 

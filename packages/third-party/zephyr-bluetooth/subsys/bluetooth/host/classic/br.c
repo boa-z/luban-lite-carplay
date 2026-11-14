@@ -115,6 +115,8 @@ void bt_hci_conn_req(struct net_buf *buf)
 	uint8_t err;
 
 	LOG_DBG("conn req from %s, type 0x%02x", bt_addr_str(&evt->bdaddr), evt->link_type);
+	LOG_INF("BR incoming connection: peer=%s type=0x%02x",
+		bt_addr_str(&evt->bdaddr), evt->link_type);
 
 	if (evt->link_type != BT_HCI_ACL) {
 		err = bt_esco_conn_req(evt);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, sakumisu
+ * Copyright (c) 2022-2023, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -45,8 +45,14 @@
 #define __ALIGNED(x) __attribute__((aligned(x)))
 #endif
 #elif defined(__ICCARM__) || defined(__ICCRX__) || defined(__ICCRISCV__)
+#if (__VER__ >= 8000000)
+  #define __ICCARM_V8 1
+#else
+  #define __ICCARM_V8 0
+#endif
+
 #ifndef __USED
-#if defined(__ICCARM_V8) || defined (__ICCRISCV__)
+#if defined(__ICCARM_V8) || defined(__ICCRISCV__)
 #define __USED __attribute__((used))
 #else
 #define __USED __root
@@ -54,7 +60,7 @@
 #endif
 
 #ifndef __WEAK
-#if defined(__ICCARM_V8) || defined (__ICCRISCV__)
+#if defined(__ICCARM_V8) || defined(__ICCRISCV__)
 #define __WEAK __attribute__((weak))
 #else
 #define __WEAK _Pragma("__weak")
@@ -62,7 +68,7 @@
 #endif
 
 #ifndef __PACKED
-#if defined(__ICCARM_V8) || defined (__ICCRISCV__)
+#if defined(__ICCARM_V8) || defined(__ICCRISCV__)
 #define __PACKED __attribute__((packed, aligned(1)))
 #else
 /* Needs IAR language extensions */
@@ -71,7 +77,7 @@
 #endif
 
 #ifndef __PACKED_STRUCT
-#if defined(__ICCARM_V8) || defined (__ICCRISCV__)
+#if defined(__ICCARM_V8) || defined(__ICCRISCV__)
 #define __PACKED_STRUCT struct __attribute__((packed, aligned(1)))
 #else
 /* Needs IAR language extensions */
@@ -80,7 +86,7 @@
 #endif
 
 #ifndef __PACKED_UNION
-#if defined(__ICCARM_V8) || defined (__ICCRISCV__)
+#if defined(__ICCARM_V8) || defined(__ICCRISCV__)
 #define __PACKED_UNION union __attribute__((packed, aligned(1)))
 #else
 /* Needs IAR language extensions */
@@ -89,7 +95,7 @@
 #endif
 
 #ifndef __ALIGNED
-#if defined(__ICCARM_V8) || defined (__ICCRISCV__)
+#if defined(__ICCARM_V8) || defined(__ICCRISCV__)
 #define __ALIGNED(x) __attribute__((aligned(x)))
 #elif (__VER__ >= 7080000)
 /* Needs IAR language extensions */
@@ -179,8 +185,28 @@
         (field)[3] = (uint8_t)((value) >> 0);  \
     } while (0)
 
-#define WBVAL(x) (x & 0xFF), ((x >> 8) & 0xFF)
-#define DBVAL(x) (x & 0xFF), ((x >> 8) & 0xFF), ((x >> 16) & 0xFF), ((x >> 24) & 0xFF)
+#define GET_LE16(field) \
+    (((uint16_t)(field)[0] << 0) | ((uint16_t)(field)[1] << 8))
+
+#define GET_LE32(field) \
+    (((uint32_t)(field)[0] << 0) | ((uint32_t)(field)[1] << 8) | ((uint32_t)(field)[2] << 16) | ((uint32_t)(field)[3] << 24))
+
+#define SET_LE16(field, value)                \
+    do {                                      \
+        (field)[0] = (uint8_t)((value) >> 0); \
+        (field)[1] = (uint8_t)((value) >> 8); \
+    } while (0)
+
+#define SET_LE32(field, value)                \
+    do {                                      \
+        (field)[0] = (uint8_t)((value) >> 0); \
+        (field)[1] = (uint8_t)((value) >> 8); \
+        (field)[2] = (uint8_t)((value) >> 16); \
+        (field)[3] = (uint8_t)((value) >> 24); \
+    } while (0)
+
+#define WBVAL(x) ((x) & 0xFF), (((x) >> 8) & 0xFF)
+#define DBVAL(x) ((x) & 0xFF), (((x) >> 8) & 0xFF), (((x) >> 16) & 0xFF), (((x) >> 24) & 0xFF)
 
 #define PP_NARG(...) \
     PP_NARG_(__VA_ARGS__, PP_RSEQ_N())
@@ -203,7 +229,25 @@
         19, 18, 17, 16, 15, 14, 13, 12, 11, 10, \
         9, 8, 7, 6, 5, 4, 3, 2, 1, 0
 
+/*
+ * Divide positive or negative dividend by positive or negative divisor
+ * and round to closest integer. Result is undefined for negative
+ * divisors if the dividend variable type is unsigned and for negative
+ * dividends if the divisor variable type is unsigned.
+ */
+#define DIV_ROUND_CLOSEST(x, divisor) (       \
+    {                                         \
+        typeof(x) __x = x;                    \
+        typeof(divisor) __d = divisor;        \
+        (((typeof(x))-1) > 0 ||               \
+         ((typeof(divisor))-1) > 0 ||         \
+         (((__x) > 0) == ((__d) > 0))) ?      \
+            (((__x) + ((__d) / 2)) / (__d)) : \
+            (((__x) - ((__d) / 2)) / (__d));  \
+    })
+
 #define USB_MEM_ALIGNX __attribute__((aligned(CONFIG_USB_ALIGN_SIZE)))
+
 #define USB_ALIGN_UP(size, align) (((size) + (align)-1) & ~((align)-1))
 #define USB_ALIGN_DOWN(size, align) ((size) & ~((align)-1))
 

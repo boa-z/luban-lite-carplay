@@ -361,39 +361,40 @@ int mbedtls_aes_crypt_ctr(mbedtls_aes_context *ctx,
                           const unsigned char *input,
                           unsigned char *output)
 {
-    struct hwcrypto_symmetric *aes_ctx;
+    size_t n;
+    int ret;
 
-    if (ctx)
-    {
-        aes_ctx = (struct hwcrypto_symmetric *)(*ctx);
-        LOG_D("aes crypt ctr ctx[%08x] off:%d cnt:%08x blk:%08x in:%08x out:%08x",
-              *ctx, nc_off ? *nc_off : -1, nonce_counter, stream_block, input, output);
-        if (aes_ctx->flags & SYMMTRIC_MODIFY_KEY)
-        {
-            rt_hwcrypto_symmetric_set_type(*ctx, HWCRYPTO_TYPE_AES_CTR);
-        }
-        if (*nc_off == 0)
-        {
-            rt_hwcrypto_symmetric_setiv(*ctx, nonce_counter, 16);
-        }
-        rt_hwcrypto_symmetric_set_ivoff(*ctx, (rt_int32_t)*nc_off);
-        if (rt_hwcrypto_symmetric_crypt(*ctx, HWCRYPTO_MODE_DECRYPT,
-                                        length, input, output) != RT_EOK)
-        {
-            LOG_E("aes crypt ctr err");
-            return -1;
-        }
-        rt_hwcrypto_symmetric_get_ivoff(*ctx, (rt_int32_t *)nc_off);
-        if (stream_block)
-        {
-            rt_hwcrypto_symmetric_getiv(*ctx, stream_block, 16);
-        }
-    }
-    else
-    {
-        LOG_E("aes crypt ctr. but ctx is null");
-    }
+    if (!ctx || !*ctx || !nc_off || !nonce_counter || !stream_block ||
+        (length && (!input || !output)) || *nc_off > 15U)
+        return MBEDTLS_ERR_AES_BAD_INPUT_DATA;
+    if (!length)
+        return 0;
 
+    /* CE implements ECB/CBC, but its native CTR branch is unsupported.
+     * Build CTR from the working ECB encrypt primitive, following mbedTLS
+     * 2.28 library/aes.c. Keep the caller-owned counter/partial keystream so
+     * arbitrary lengths, fragmented calls and in-place data work identically
+     * to the portable implementation. CTR uses AES encryption in both
+     * directions; no native CTR or decrypt operation is submitted to CE. */
+    if (rt_hwcrypto_symmetric_set_type(*ctx, HWCRYPTO_TYPE_AES_ECB) != RT_EOK)
+        return MBEDTLS_ERR_AES_HW_ACCEL_FAILED;
+
+    n = *nc_off;
+    while (length--) {
+        if (!n) {
+            ret = mbedtls_aes_crypt_ecb(ctx, MBEDTLS_AES_ENCRYPT,
+                                      nonce_counter, stream_block);
+            if (ret != 0)
+                return ret;
+            for (size_t i = 16U; i > 0U; --i)
+                if (++nonce_counter[i - 1U] != 0U)
+                    break;
+        }
+        unsigned char c = *input++;
+        *output++ = (unsigned char)(c ^ stream_block[n]);
+        n = (n + 1U) & 15U;
+    }
+    *nc_off = n;
     return 0;
 }
 #endif /* MBEDTLS_CIPHER_MODE_CTR */

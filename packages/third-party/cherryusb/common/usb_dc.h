@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2022, sakumisu
- * Copyright (c) 2023-2025, ArtInChip Technology Co., Ltd
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,6 +11,33 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief USB device controller driver ops.
+ *
+ * Structure containing the USB device controller driver ops.
+ */
+struct usbd_dc_driver {
+    const char *driver_name;
+    const char *driver_desc;
+    int (*init)(uint8_t busid);
+    int (*deinit)(uint8_t busid);
+    int (*set_address)(uint8_t busid, const uint8_t addr);
+    int (*set_remote_wakeup)(uint8_t busid);
+    uint8_t (*get_port_speed)(uint8_t busid);
+    int (*ep_open)(uint8_t busid, const struct usb_endpoint_descriptor *ep);
+    int (*ep_open_extra)(uint8_t busid, const struct usb_endpoint_descriptor *ep, const struct usb_endpoint_companion_descriptor *ep_comp);
+    int (*ep_close)(uint8_t busid, const uint8_t ep);
+    int (*ep_set_stall)(uint8_t busid, const uint8_t ep);
+    int (*ep_clear_stall)(uint8_t busid, const uint8_t ep);
+    int (*ep_is_stalled)(uint8_t busid, const uint8_t ep, uint8_t *stalled);
+    int (*ep_start_write)(uint8_t busid, const uint8_t ep, const uint8_t *data, uint32_t data_len);
+    int (*ep_start_read)(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t data_len);
+    void (*irq_handler)(uint8_t busid);
+#ifdef CONFIG_USBDEV_TEST_MODE
+    void (*execute_test_mode)(uint8_t busid, uint8_t test_mode);
+#endif
+};
 
 /**
  * @brief init device controller registers.
@@ -58,6 +84,15 @@ uint8_t usbd_get_port_speed(uint8_t busid);
  * @return On success will return 0, and others indicate fail.
  */
 int usbd_ep_open(uint8_t busid, const struct usb_endpoint_descriptor *ep);
+
+/**
+ * @brief configure endpoint extra for usb3.0.
+ *
+ * @param [in]  ep_cfg Endpoint config.
+ *
+ * @return On success will return 0, and others indicate fail.
+ */
+int usbd_ep_open_extra(uint8_t busid, const struct usb_endpoint_descriptor *ep, const struct usb_endpoint_companion_descriptor *ep_comp);
 
 /**
  * @brief Disable the selected endpoint
@@ -117,7 +152,6 @@ int usbd_ep_is_stalled(uint8_t busid, const uint8_t ep, uint8_t *stalled);
  * @return 0 on success, negative errno code on fail.
  */
 int usbd_ep_start_write(uint8_t busid, const uint8_t ep, const uint8_t *data, uint32_t data_len);
-int usbd_ep_start_read_raw(const uint8_t ep, uint8_t *data, uint32_t data_len, uint8_t cache_align);
 
 /**
  * @brief Setup out ep transfer setting and start transfer.
@@ -137,10 +171,12 @@ int usbd_ep_start_read_raw(const uint8_t ep, uint8_t *data, uint32_t data_len, u
  * @return 0 on success, negative errno code on fail.
  */
 int usbd_ep_start_read(uint8_t busid, const uint8_t ep, uint8_t *data, uint32_t data_len);
-int usbd_ep_start_read_raw(const uint8_t ep, uint8_t *data, uint32_t data_len, uint8_t cache_align);
-void usbd_ep0_start_read_zlp(void);
 
-/* usb dcd irq callback */
+/* usb dcd irq callback, called by user */
+
+/**
+ * @brief Usb sof irq callback.
+ */
 void usbd_event_sof_handler(uint8_t busid);
 
 /**
@@ -190,12 +226,17 @@ void usbd_event_ep_in_complete_handler(uint8_t busid, uint8_t ep, uint32_t nbyte
  */
 void usbd_event_ep_out_complete_handler(uint8_t busid, uint8_t ep, uint32_t nbytes);
 
-void usbd_req_test_mode(uint8_t test_mode);
+#ifdef CONFIG_USBDEV_TEST_MODE
+/**
+ * @brief Usb execute test mode
+ * @param[in]  busid     device busid
+ * @param[in]  test_mode usb test mode
+ */
+void usbd_execute_test_mode(uint8_t busid, uint8_t test_mode);
+#endif
 
-void usb_plug_irq(void *args);
-
-int usbd_plug_irq_init(void);
-
+/* called by user */
+void USBD_IRQHandler(uint8_t busid);
 
 #ifdef __cplusplus
 }
