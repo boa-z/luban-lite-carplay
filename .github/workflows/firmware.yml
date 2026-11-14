@@ -33,6 +33,8 @@ jobs:
           bash packages/third-party/cherryusb-luban/tests/run_baremetal.sh
           bash packages/third-party/cherryusb-luban/tests/run.sh
           bash packages/third-party/cherryusb-luban/tests/run_control_probe.sh
+      - name: Check video handoff and SDK framebuffer command ABI
+        run: make -C packages/third-party/rt-carplay check-lubanlite-video SDK_ROOT="$GITHUB_WORKSPACE"
       - name: Build Bootloader and complete IMG
         env:
           PYTHONUNBUFFERED: '1'
