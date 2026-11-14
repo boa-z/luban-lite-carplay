@@ -2,25 +2,24 @@
 
 ## Support Chip List
 
-### HEZHOU
-
-- AIR105
-
-### ES32
+### Eastsoft
 
 - ES32F3xx
 
 ### TI
 
 - MSP432E4x
+- TM4Cx
+
+### Bekencorp
+
+- BK7256/BK7258
 
 ### AllwinnerTech
 
-- F1Cxxx
+- F1Cxxx, F2Cxxx
+- Except F1Cxxx, F2Cxxx (musb + EHCI+ OHCI)
 
-## Before Use
+### SIFLI
 
-Your should implement `usb_dc_low_level_init` and `usb_dc_low_level_deinit`.
-- Enable or disable USB clock and set USB clock for 48M.
-- Enable or disable gpio and gpio clk for usb dp and dm.
-- Enable or disable usb irq
+- SF325X

@@ -21,6 +21,8 @@
 #include "usb_osal.h"
 #include "usbh_hub.h"
 #include "usb_memcpy.h"
+#include "usb_ringbuffer.h"
+#include "usb_mempool.h"
 #include "usb_dcache.h"
 #include "usb_version.h"
 
@@ -28,18 +30,45 @@
 extern "C" {
 #endif
 
+enum usbh_event_type {
+    /* USB HCD IRQ */
+    USBH_EVENT_ERROR,
+    USBH_EVENT_SOF,
+
+    /* USB DEVICE STATUS */
+    USBH_EVENT_DEVICE_RESET,
+    USBH_EVENT_DEVICE_CONNECTED,
+    USBH_EVENT_DEVICE_DISCONNECTED,
+    USBH_EVENT_DEVICE_CONFIGURED,
+    USBH_EVENT_DEVICE_WAKEUP,
+    USBH_EVENT_DEVICE_SUSPEND,
+    USBH_EVENT_DEVICE_RESUME,
+
+    /* USB DEVICE INTERFACE STATUS */
+    USBH_EVENT_INTERFACE_UNSUPPORTED,
+    USBH_EVENT_INTERFACE_START,
+    USBH_EVENT_INTERFACE_STOP,
+
+    /* USB FRAMEWORK STATUS */
+    USBH_EVENT_INIT,
+    USBH_EVENT_DEINIT,
+    USBH_EVENT_UNKNOWN,
+};
+
+#define USB_HUB_PORT_ANY  0
+#define USB_HUB_INDEX_ANY 0
+#define USB_INTERFACE_ANY 0xff
+
 #define USB_CLASS_MATCH_VENDOR        0x0001
 #define USB_CLASS_MATCH_PRODUCT       0x0002
 #define USB_CLASS_MATCH_INTF_CLASS    0x0004
 #define USB_CLASS_MATCH_INTF_SUBCLASS 0x0008
 #define USB_CLASS_MATCH_INTF_PROTOCOL 0x0010
+#define USB_CLASS_MATCH_INTF_NUM      0x0020
 #define USB_CLASS_MATCH_VID_PID       (USB_CLASS_MATCH_VENDOR | USB_CLASS_MATCH_PRODUCT)
 
 #define CLASS_CONNECT(hport, i)    ((hport)->config.intf[i].class_driver->connect(hport, i))
 #define CLASS_DISCONNECT(hport, i) ((hport)->config.intf[i].class_driver->disconnect(hport, i))
-
-#define USBH_EVENT_ENUMERATE        (1 << 0)
-#define USBH_EVENT_RELEASE          (1 << 1)
 
 #ifdef __ARMCC_VERSION /* ARM C Compiler */
 #define CLASS_INFO_DEFINE __attribute__((section("usbh_class_info"))) __USED __ALIGNED(1)
@@ -50,7 +79,7 @@ extern "C" {
 #define CLASS_INFO_DEFINE __attribute__((section(".usbh_class_info"))) __USED __ALIGNED(1)
 #endif
 
-#define USBH_GET_URB_INTERVAL(interval, speed) (speed < USB_SPEED_HIGH ? interval : (1 << (interval - 1)))
+#define USBH_GET_URB_INTERVAL(interval, speed) (speed < USB_SPEED_HIGH ? (interval * 1000) : ((1 << (interval - 1)) * 125))
 
 #define USBH_EP_INIT(ep, ep_desc)                                            \
     do {                                                                     \
@@ -63,11 +92,14 @@ extern "C" {
                      USB_GET_MULT(ep_desc->wMaxPacketSize));                 \
     } while (0)
 
+typedef void (*usbh_event_handler_t)(uint8_t busid, uint8_t hub_index, uint8_t hub_port, uint8_t intf, uint8_t event);
+
 struct usbh_class_info {
     uint8_t match_flags;           /* Used for product specific matches; range is inclusive */
     uint8_t bInterfaceClass;       /* Base device class code */
     uint8_t bInterfaceSubClass;    /* Sub-class, depends on base class. Eg. */
     uint8_t bInterfaceProtocol;    /* Protocol, depends on base class. Eg. */
+    uint8_t bInterfaceNumber;      /* Interface number */
     const uint16_t (*id_table)[2]; /* List of Vendor/Product ID pairs */
     const struct usbh_class_driver *class_driver;
 };
@@ -75,6 +107,7 @@ struct usbh_class_info {
 struct usbh_hubport;
 struct usbh_class_driver {
     const char *driver_name;
+    const char *driver_desc;
     int (*connect)(struct usbh_hubport *hport, uint8_t intf);
     int (*disconnect)(struct usbh_hubport *hport, uint8_t intf);
 };
@@ -109,8 +142,8 @@ struct usbh_hubport {
     uint8_t depth;    /* distance from root hub */
     uint8_t route;    /* route string */
     uint8_t slot_id;  /* slot id */
-    uint16_t raw_config_desc_len;
     struct usb_device_descriptor device_desc;
+    struct usbh_configuration config;
     const char *iManufacturer;
     const char *iProduct;
     const char *iSerialNumber;
@@ -122,12 +155,9 @@ struct usbh_hubport {
     struct usb_endpoint_descriptor ep0;
     struct usbh_urb ep0_urb;
     usb_osal_mutex_t mutex;
-    usb_osal_event_t event;
-    struct usbh_configuration config;
 };
 
 struct usbh_hub {
-    usb_slist_t list;
     bool connected;
     bool is_roothub;
     uint8_t index;
@@ -137,15 +167,15 @@ struct usbh_hub {
     uint8_t powerdelay;
     uint8_t tt_think;
     bool ismtt;
-    struct usb_hub_descriptor hub_desc; /* USB 2.0 only */
+    struct usb_hub_descriptor hub_desc;       /* USB 2.0 only */
     struct usb_hub_ss_descriptor hub_ss_desc; /* USB 3.0 only */
+    struct usbh_hubport child[CONFIG_USBHOST_MAX_EHPORTS];
     struct usbh_hubport *parent;
     struct usbh_bus *bus;
     struct usb_endpoint_descriptor *intin;
     struct usbh_urb intin_urb;
     uint8_t *int_buffer;
     struct usb_osal_timer *int_timer;
-    struct usbh_hubport child[CONFIG_USBHOST_MAX_EHPORTS];
 };
 
 struct usbh_devaddr_map {
@@ -156,7 +186,7 @@ struct usbh_devaddr_map {
      * alloctab[3]:addr from 96~127
      *
      */
-    uint8_t next;         /* Next device address */
+    uint8_t last;         /* Last device address */
     uint32_t alloctab[4]; /* Bit allocation table */
 };
 
@@ -174,7 +204,11 @@ struct usbh_bus {
     struct usbh_devaddr_map devgen;
     usb_osal_thread_t hub_thread;
     usb_osal_mq_t hub_mq;
-    usb_slist_t hub_list;
+    usb_osal_sem_t hub_sem;
+    usbh_event_handler_t event_handler;
+#if defined(CONFIG_USBHOST_MULT_HC)
+    const struct usbh_hc_driver *hc_driver;
+#endif
 };
 
 static inline void usbh_control_urb_fill(struct usbh_urb *urb,
@@ -211,7 +245,6 @@ static inline void usbh_bulk_urb_fill(struct usbh_urb *urb,
     urb->transfer_buffer = transfer_buffer;
     urb->transfer_buffer_length = transfer_buffer_length;
     urb->timeout = timeout;
-    urb->errorcode = 0;
     urb->complete = complete;
     urb->arg = arg;
 }
@@ -236,6 +269,11 @@ static inline void usbh_int_urb_fill(struct usbh_urb *urb,
     urb->interval = USBH_GET_URB_INTERVAL(ep->bInterval, hport->speed);
 }
 
+extern struct usbh_bus g_usbhost_bus[];
+#ifdef USBH_IRQHandler
+#error USBH_IRQHandler is obsolete, please call USBH_IRQHandler(xxx) in your irq
+#endif
+
 /**
  * @brief Submit an control transfer to an endpoint.
  * This is a blocking method; this method will not return until the transfer has completed.
@@ -258,9 +296,10 @@ int usbh_control_transfer(struct usbh_hubport *hport, struct usb_setup_packet *s
  * @param hport Pointer to the USB hub port structure.
  * @param index Index of the string descriptor to retrieve.
  * @param output Pointer to the buffer where the retrieved descriptor will be stored.
+ * @param output_len Length of the output buffer.
  * @return On success will return 0, and others indicate fail.
  */
-int usbh_get_string_desc(struct usbh_hubport *hport, uint8_t index, uint8_t *output);
+int usbh_get_string_desc(struct usbh_hubport *hport, uint8_t index, uint8_t *output, uint16_t output_len);
 
 /**
  * @brief Sets the alternate setting for a USB interface on a specific hub port.
@@ -276,13 +315,15 @@ int usbh_get_string_desc(struct usbh_hubport *hport, uint8_t index, uint8_t *out
  */
 int usbh_set_interface(struct usbh_hubport *hport, uint8_t intf, uint8_t altsetting);
 
-struct usbh_bus *usbh_alloc_bus(uint8_t busid, uint32_t reg_base);
-int usbh_initialize(struct usbh_bus *bus);
-int usbh_deinitialize(struct usbh_bus *bus);
+#if defined(CONFIG_USBHOST_MULT_HC)
+void usbh_register_hc_driver(uint8_t busid, const struct usbh_hc_driver *driver);
+#endif
+int usbh_initialize(uint8_t busid, uintptr_t reg_base, usbh_event_handler_t event_handler);
+int usbh_deinitialize(uint8_t busid);
 void *usbh_find_class_instance(const char *devname);
-int usbh_init(void);
+struct usbh_hubport *usbh_find_hubport(uint8_t busid, uint8_t hub_index, uint8_t hub_port);
+uint8_t usbh_get_hport_active_config_index(struct usbh_hubport *hport);
 
-int usbh_hubport_enumerate_wait(struct usbh_hubport *hport);
 int lsusb(int argc, char **argv);
 
 #ifdef __cplusplus

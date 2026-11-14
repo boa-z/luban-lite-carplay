@@ -44,7 +44,6 @@ static int usbd_video_control_request_handler(uint8_t busid, struct usb_setup_pa
                 case VIDEO_REQUEST_GET_INFO:
                     break;
                 default:
-                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_VC_VIDEO_POWER_MODE_CONTROL\r\n", setup->bRequest);
                     return -1;
             }
 
@@ -58,7 +57,6 @@ static int usbd_video_control_request_handler(uint8_t busid, struct usb_setup_pa
                 case VIDEO_REQUEST_GET_INFO:
                     break;
                 default:
-                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_VC_REQUEST_ERROR_CODE_CONTROL\r\n", setup->bRequest);
                     return -1;
             }
 
@@ -90,22 +88,12 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                         (*data)[0] = 0x08;
                                         *len = 1;
                                         break;
-                                    case VIDEO_REQUEST_SET_CUR:
-                                        (*data)[0] = 0x08;
-                                        *len = 1;
-                                        break;
                                     default:
-                                        USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_CT_AE_MODE_CONTROL\r\n", setup->bRequest);
                                         return -1;
                                 }
                                 break;
                             case VIDEO_CT_EXPOSURE_TIME_ABSOLUTE_CONTROL:
                                 switch (setup->bRequest) {
-                                    case VIDEO_REQUEST_SET_CUR: {
-                                        uint32_t dwExposureTimeAbsolute = (uint16_t)(*data)[3] << 8 | (uint16_t)(*data)[2] | (uint16_t)(*data)[1] << 8 | (uint16_t)(*data)[0];
-                                        USB_LOG_INFO("Video set exposure time:%ld\r\n", (unsigned long)dwExposureTimeAbsolute);
-                                        *len = 0;
-                                    } break;
                                     case VIDEO_REQUEST_GET_CUR: {
                                         uint32_t dwExposureTimeAbsolute = 2500;
                                         memcpy(*data, (uint8_t *)&dwExposureTimeAbsolute, 4);
@@ -136,7 +124,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                         *len = 4;
                                     } break;
                                     default:
-                                        USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_CT_EXPOSURE_TIME_ABSOLUTE_CONTROL\r\n", setup->bRequest);
                                         return -1;
                                 }
                                 break;
@@ -172,7 +159,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                         *len = 2;
                                     } break;
                                     default:
-                                        USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_CT_FOCUS_ABSOLUTE_CONTROL\r\n", setup->bRequest);
                                         return -1;
                                 }
                                 break;
@@ -208,7 +194,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                         *len = 2;
                                     } break;
                                     default:
-                                        USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_CT_ZOOM_ABSOLUTE_CONTROL\r\n", setup->bRequest);
                                         return -1;
                                 }
                                 break;
@@ -244,7 +229,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                         *len = 2;
                                     } break;
                                     default:
-                                        USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_CT_ROLL_ABSOLUTE_CONTROL\r\n", setup->bRequest);
                                         return -1;
                                 }
                                 break;
@@ -256,16 +240,13 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                         *len = 2;
                                     } break;
                                     default:
-                                        USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_CT_FOCUS_AUTO_CONTROL\r\n ", setup->bRequest);
                                         return -1;
                                 }
                                 break;
                             default:
-                                USB_LOG_WRN("Unhandled Video Class control selector 0x%02x\r\n", control_selector);
                                 return -1;
                         }
                     } else {
-                        USB_LOG_WRN("Unhandled Video Class wTerminalType 0x%02x - VIDEO_VC_INPUT_TERMINAL_DESCRIPTOR_SUBTYPE\r\n ", entity_info->wTerminalType);
                         return -2;
                     }
                     break;
@@ -305,18 +286,15 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     uint16_t wBacklightCompensation = 4;
                                     memcpy(*data, (uint8_t *)&wBacklightCompensation, 2);
                                     *len = 2;
-                                    USB_LOG_INFO("Video get def BacklightCompensation %ld\r\n", (unsigned long)wBacklightCompensation);
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_REQUEST_GET_CUR\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
                         case VIDEO_PU_BRIGHTNESS_CONTROL:
                             switch (setup->bRequest) {
                                 case VIDEO_REQUEST_SET_CUR: {
-                                    uint16_t wBrightness = (uint16_t)(*data)[1] << 8 | (uint16_t)(*data)[0];
-                                    USB_LOG_INFO("Video set brightness: %d\r\n", wBrightness);
+                                    //uint16_t wBrightness = (uint16_t)(*data)[1] << 8 | (uint16_t)(*data)[0];
                                 } break;
                                 case VIDEO_REQUEST_GET_CUR: {
                                     uint16_t wBrightness = 0x0080;
@@ -346,10 +324,8 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     uint16_t wBrightness = 0x0080;
                                     memcpy(*data, (uint8_t *)&wBrightness, 2);
                                     *len = 2;
-                                    USB_LOG_INFO("Video get def Brightness: %ld\r\n", (unsigned long)wBrightness);
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_BRIGHTNESS_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
@@ -385,7 +361,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 2;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_CONTRAST_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
@@ -421,7 +396,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 2;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_HUE_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
@@ -452,7 +426,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 2;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_SATURATION_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
@@ -483,22 +456,11 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 2;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_SHARPNESS_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
                         case VIDEO_PU_GAIN_CONTROL:
                             switch (setup->bRequest) {
-                                case VIDEO_REQUEST_SET_CUR: {
-                                        uint16_t wGain = (uint16_t)(*data)[1] << 8 | (uint16_t)(*data)[0];
-                                        USB_LOG_INFO("Video set exposure time: %ld\r\n", (unsigned long)wGain);
-                                        *len = 0;
-                                    } break;
-                                case VIDEO_REQUEST_GET_CUR: {
-                                    uint16_t wGain = 0x0000;
-                                    memcpy(*data, (uint8_t *)&wGain, 2);
-                                    *len = 2;
-                                } break;
                                 case VIDEO_REQUEST_GET_MIN: {
                                     uint16_t wGain = 0;
                                     memcpy(*data, (uint8_t *)&wGain, 2);
@@ -524,7 +486,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 2;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_GAIN_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
@@ -560,7 +521,6 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 2;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_WHITE_BALANCE_TEMPERATURE_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
@@ -572,13 +532,11 @@ static int usbd_video_control_unit_terminal_request_handler(uint8_t busid, struc
                                     *len = 1;
                                 } break;
                                 default:
-                                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_PU_WHITE_BALANCE_TEMPERATURE_AUTO_CONTROL\r\n", setup->bRequest);
                                     return -1;
                             }
                             break;
                         default:
                             g_usbd_video[busid].error_code = 0x06;
-                            USB_LOG_WRN("Unhandled Video Class control selector 0x%02x\r\n", control_selector);
                             return -1;
                     }
                     break;
@@ -603,10 +561,10 @@ static int usbd_video_stream_request_handler(uint8_t busid, struct usb_setup_pac
         case VIDEO_VS_PROBE_CONTROL:
             switch (setup->bRequest) {
                 case VIDEO_REQUEST_SET_CUR:
-                    //memcpy((uint8_t *)&g_usbd_video[busid].probe, *data, setup->wLength);
+                    //memcpy((uint8_t *)&g_usbd_video[busid].probe, *data, sizeof(struct video_probe_and_commit_controls));
                     break;
                 case VIDEO_REQUEST_GET_CUR:
-                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].probe, setup->wLength);
+                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].probe, sizeof(struct video_probe_and_commit_controls));
                     *len = sizeof(struct video_probe_and_commit_controls);
                     break;
 
@@ -614,7 +572,7 @@ static int usbd_video_stream_request_handler(uint8_t busid, struct usb_setup_pac
                 case VIDEO_REQUEST_GET_MAX:
                 case VIDEO_REQUEST_GET_RES:
                 case VIDEO_REQUEST_GET_DEF:
-                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].probe, setup->wLength);
+                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].probe, sizeof(struct video_probe_and_commit_controls));
                     *len = sizeof(struct video_probe_and_commit_controls);
                     break;
                 case VIDEO_REQUEST_GET_LEN:
@@ -628,24 +586,23 @@ static int usbd_video_stream_request_handler(uint8_t busid, struct usb_setup_pac
                     break;
 
                 default:
-                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_VS_PROBE_CONTROL\r\n", setup->bRequest);
                     return -1;
             }
             break;
         case VIDEO_VS_COMMIT_CONTROL:
             switch (setup->bRequest) {
                 case VIDEO_REQUEST_SET_CUR:
-                    //memcpy((uint8_t *)&g_usbd_video[busid].commit, *data, setup->wLength);
+                    //memcpy((uint8_t *)&g_usbd_video[busid].commit, *data, sizeof(struct video_probe_and_commit_controls));
                     break;
                 case VIDEO_REQUEST_GET_CUR:
-                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].commit, setup->wLength);
+                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].commit, sizeof(struct video_probe_and_commit_controls));
                     *len = sizeof(struct video_probe_and_commit_controls);
                     break;
                 case VIDEO_REQUEST_GET_MIN:
                 case VIDEO_REQUEST_GET_MAX:
                 case VIDEO_REQUEST_GET_RES:
                 case VIDEO_REQUEST_GET_DEF:
-                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].commit, setup->wLength);
+                    memcpy(*data, (uint8_t *)&g_usbd_video[busid].commit, sizeof(struct video_probe_and_commit_controls));
                     *len = sizeof(struct video_probe_and_commit_controls);
                     break;
 
@@ -660,7 +617,6 @@ static int usbd_video_stream_request_handler(uint8_t busid, struct usb_setup_pac
                     break;
 
                 default:
-                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_VS_COMMIT_CONTROL\r\n", setup->bRequest);
                     return -1;
             }
             break;
@@ -675,7 +631,6 @@ static int usbd_video_stream_request_handler(uint8_t busid, struct usb_setup_pac
                     *len = 1;
                     break;
                 default:
-                    USB_LOG_WRN("Unhandled Video Class bRequest 0x%02x - VIDEO_VS_STREAM_ERROR_CODE_CONTROL\r\n", setup->bRequest);
                     return -1;
             }
             break;
@@ -728,61 +683,6 @@ static void video_notify_handler(uint8_t busid, uint8_t event, void *arg)
         default:
             break;
     }
-}
-
-
-uint8_t *video_get_if_descriptor(uint8_t *desc, uint8_t desc_type, uint8_t desc_subtype)
-{
-    uint32_t ofs = 0;
-
-    while(desc[ofs] != 0) {
-        if (desc[ofs + 1] == desc_type) {
-            USB_LOG_DBG("CMOP: desc_type %#x %#x \n", desc[ofs + 1], desc[ofs + 2]);
-            if (desc[ofs + 2] == desc_subtype) {
-                USB_LOG_DBG("CMOP: desc_subtype %#x\n", desc[ofs + 2]);
-                return &desc[ofs];
-            }
-        }
-        ofs += desc[ofs];
-        if (desc[ofs] == 0)
-            break;
-    }
-
-    USB_LOG_DBG("UVC: Can not find descriptor for this type: %#x\n", desc_type);
-
-    return NULL;
-}
-
-int video_set_camera_terminal_control(struct video_vc_input_terminal_bmcontrol_bitmap* bitmap, uint8_t *desc)
-{
-    uint8_t *ct_desc_string = NULL;
-    struct video_cs_if_vc_input_terminal_descriptor* ct_desc = NULL;
-
-    ct_desc_string = video_get_if_descriptor(desc, VIDEO_CS_INTERFACE_DESCRIPTOR_TYPE,
-                                                VIDEO_VC_INPUT_TERMINAL_DESCRIPTOR_SUBTYPE);
-    if (ct_desc_string == NULL)
-        return -1;
-
-    ct_desc = (struct video_cs_if_vc_input_terminal_descriptor*)ct_desc_string;
-    memcpy((uint8_t *)ct_desc->bmaControls, (uint8_t *)bitmap, ct_desc->bControlSize);
-
-    return 0;
-}
-
-int video_set_processing_uint(struct video_vc_processing_unit_bmcontrol_bitmap* bitmap, uint8_t *desc)
-{
-    uint8_t *pu_desc_string = NULL;
-    struct video_cs_if_vc_processing_unit_descriptor* pu_desc = NULL;
-
-    pu_desc_string = video_get_if_descriptor(desc, VIDEO_CS_INTERFACE_DESCRIPTOR_TYPE,
-                                                VIDEO_VC_PROCESSING_UNIT_DESCRIPTOR_SUBTYPE);
-    if (pu_desc_string == NULL)
-        return -1;
-
-    pu_desc = (struct video_cs_if_vc_processing_unit_descriptor*)pu_desc_string;
-    memcpy((uint8_t *)pu_desc->bmaControls,  (uint8_t *)bitmap, pu_desc->bControlSize);
-
-    return 0;
 }
 
 static void usbd_video_probe_and_commit_controls_init(uint8_t busid, uint32_t dwFrameInterval, uint32_t dwMaxVideoFrameSize, uint32_t dwMaxPayloadTransferSize)

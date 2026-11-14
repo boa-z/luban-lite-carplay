@@ -233,6 +233,67 @@ static int bt_update_controller_baudrate(const struct rt_device *uart,
 	return 0;
 }
 
+/*
+ * Realtek "Realtech" patch container (RTL8723FS/RTL8733BS):
+ *   0x00  u8  signature[8]           "Realtech"
+ *   0x08  u32 fw_version
+ *   0x0c  u16 num_patches
+ *   0x0e  u16 chip_id[num_patches]
+ *   0x0e+2n  u16 patch_len[num_patches]
+ *   0x0e+4n  u32 start_offset[num_patches]
+ *
+ * The controller only accepts the patch payload for its own chip: the
+ * vendor stack parses this header, picks the RTL8733BS entry (chip id
+ * 0x0003, the last one on this board's image) and downloads only that
+ * patch plus the vendor config.  Sending the whole file, header included,
+ * makes the download stall once it passes the controller's staging limit.
+ */
+#define RTL_EPATCH_HDR_BASE 0x0eu
+#define RTL_8733BS_CHIP_ID  0x0003u
+
+static bool bt_firmware_pick_patch(const uint8_t *fw, uint32_t fw_len,
+                                   uint32_t *out_off, uint32_t *out_len)
+{
+    uint16_t num;
+    int pick = -1;
+
+    if (fw_len < RTL_EPATCH_HDR_BASE + 8u ||
+        memcmp(fw, "Realtech", 8) != 0)
+        return false;
+
+    num = get_unaligned_le16(fw + 0x0c);
+    if (num == 0 || fw_len < RTL_EPATCH_HDR_BASE + 8u * num)
+        return false;
+
+    const uint8_t *ids = fw + RTL_EPATCH_HDR_BASE;
+    const uint8_t *lens = ids + 2u * num;
+    const uint8_t *offs = ids + 4u * num;
+
+    for (unsigned i = 0; i < num; i++) {
+        uint16_t chip = get_unaligned_le16(ids + 2u * i);
+
+        pr_info("rtl8733bs fw: entry %u: chip 0x%04x len 0x%x off 0x%x\n",
+                i, chip, get_unaligned_le16(lens + 2u * i),
+                get_unaligned_le32(offs + 4u * i));
+        if (chip == RTL_8733BS_CHIP_ID)
+            pick = (int)i;
+    }
+    if (pick < 0)
+        pick = (int)num - 1; /* the last entry is the RTL8733BS patch */
+
+    uint32_t off = get_unaligned_le32(offs + 4u * pick);
+    uint32_t len = get_unaligned_le16(lens + 2u * pick);
+
+    if (len == 0 || off > fw_len || len > fw_len - off) {
+        pr_err("rtl8733bs fw: patch %d out of range\n", pick);
+        return false;
+    }
+
+    *out_off = off;
+    *out_len = len;
+    return true;
+}
+
 static int bt_firmware_download(const uint8_t *firmware,
                                 uint32_t firmware_len,
                                 const uint8_t *config,
@@ -243,27 +304,43 @@ static int bt_firmware_download(const uint8_t *firmware,
     struct net_buf *rsp;
     struct net_buf *buf;
 	uint8_t *p, *data = NULL;
+    uint32_t patch_off = 0;
+    uint32_t patch_len = firmware_len;
     uint32_t dlen = 0;
     int frag_num = 0, frag_len = RTL_FRAG_LEN;
 	int i, ret = -1;
 
 	LOG_DBG("Executing Fw downloading for RTL8733BS device");
 
-    dlen = firmware_len + config_len;
+    if (bt_firmware_pick_patch(firmware, firmware_len, &patch_off,
+                               &patch_len)) {
+        pr_info("rtl8733bs fw: using patch off 0x%x len 0x%x\n",
+                (unsigned)patch_off, (unsigned)patch_len);
+    } else {
+        pr_warn("rtl8733bs fw: no Realtech header, sending the whole image\n");
+    }
+
+    dlen = patch_len + config_len;
     data = malloc(dlen);
     if (!data) {
         pr_err("malloc data failed.\n");
         return ret;
     }
 
-    memcpy(data, firmware, firmware_len);
-    memcpy(data + firmware_len, config, config_len);
+    memcpy(data, firmware + patch_off, patch_len);
+    memcpy(data + patch_len, config, config_len);
 
-    frag_num = dlen / RTL_FRAG_LEN + 1;
+    frag_num = (int)((dlen + RTL_FRAG_LEN - 1) / RTL_FRAG_LEN);
+
+    pr_info("rtl8733bs fw: %u + %u bytes, %d fragments, %u baud\n",
+            (unsigned)patch_len, (unsigned)config_len, frag_num,
+            (unsigned)custom_config.baudrate);
 
     p = data;
     for (i = 0; i < frag_num; i++) {
         LOG_DBG("download fw (%d/%d)\n", i, frag_num);
+        if ((i & 0x1f) == 0)
+            pr_info("rtl8733bs fw: %d/%d\n", i, frag_num);
 
 		buf = bt_hci_cmd_alloc(K_FOREVER);
 		if (buf == NULL) {
@@ -278,7 +355,7 @@ static int bt_firmware_download(const uint8_t *firmware,
 
         if (i == (frag_num - 1)) {
             dl_cmd.index |= 0x80; /* data end */
-            frag_len = dlen % RTL_FRAG_LEN;
+            frag_len = (int)(dlen - (uint32_t)i * RTL_FRAG_LEN);
         }
         memcpy(dl_cmd.data, p, frag_len);
 
@@ -300,6 +377,7 @@ static int bt_firmware_download(const uint8_t *firmware,
     }
 
 	LOG_DBG("Fw downloading complete");
+	pr_info("rtl8733bs fw: download complete (%d fragments)\n", frag_num);
 
 out:
     if (data)

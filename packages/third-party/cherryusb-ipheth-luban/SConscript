@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+import os
+from building import *
+Import('AIC_ROOT')
+group = []
+if GetDepend('LPKG_USING_CHERRYUSB_IPHETH'):
+    repo = GetConfigValue('LPKG_CHERRYUSB_IPHETH_PATH').strip('"')
+    if not os.path.isabs(repo):
+        repo = os.path.join(AIC_ROOT, repo)
+    integration = os.path.join(repo, 'integration', 'SConscript')
+    if not os.path.isfile(integration):
+        raise RuntimeError(
+            'cherryusb-ipheth source not found at ' + repo +
+            '; run "git submodule update --init packages/third-party/cherryusb-ipheth"'
+            ' or set CONFIG_LPKG_CHERRYUSB_IPHETH_PATH')
+    cherry = os.path.join(AIC_ROOT, 'packages', 'third-party', 'cherryusb')
+    group = DefineGroup('ipheth-usb-dependencies', [], depend=[''],
+                        CPPPATH=[cherry, cherry + '/core', cherry + '/common',
+                                 cherry + '/class/hub'])
+    group += SConscript(integration)
+Return('group')

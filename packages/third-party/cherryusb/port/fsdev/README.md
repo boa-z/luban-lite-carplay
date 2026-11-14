@@ -23,19 +23,16 @@
 
 ## GD32
 
-- GD32F10X_MD、GD32F10X_HD、GD32F10X_XD
-- GD32F30X_HD、GD32F30X_XD
-- GD32F350
-- GD32F407
+- GD32F10X
 
 ## CH32
 
 - CH32F10x、CH32V10x
 
+## N32
 
-## Before Use
+- N32H473、N32H474、N32H475、N32H481、N32H482、N32H480、N32H487、N32H488
 
-Your should implement `usb_dc_low_level_init` and `usb_dc_low_level_deinit`.
-- Enable or disable USB clock and set USB clock for 48M.
-- Enable or disable gpio and gpio clk for usb dp and dm.
-- Enable or disable usb irq
+- N32H49X
+
+

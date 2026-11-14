@@ -159,6 +159,12 @@ struct cmd_data {
 };
 
 static struct cmd_data cmd_data[BT_BUF_CMD_TX_COUNT];
+/* The RT-Thread k_sem port lazily allocates a persistent semaphore, so a
+ * stack-local Zephyr semaphore cannot be used here. Keep one zero-initialized
+ * semaphore per command slot, not one shared by every synchronous caller.
+ * The caller retains its buffer until its own completion has been consumed,
+ * which prevents that slot/semaphore from being reused prematurely. */
+static struct k_sem cmd_sync_sems[BT_BUF_CMD_TX_COUNT];
 
 #define cmd(buf) (&cmd_data[net_buf_id(buf)])
 #define acl(buf) ((struct bt_conn_rx *)net_buf_user_data(buf))
@@ -304,6 +310,13 @@ void bt_hci_host_num_completed_packets(struct net_buf *buf)
 
 	net_buf_destroy(buf);
 
+	/* The transport can release a frame before hci_acl accepts it (H5
+	 * duplicate, truncated frame, etc.). It consumed no new ACL credit.
+	 */
+	if (index == BT_CONN_INDEX_INVALID) {
+		return;
+	}
+
 	/* Do nothing if controller to host flow control is not supported */
 	if (!BT_CMD_TEST(bt_dev.supported_commands, 10, 5)) {
 		return;
@@ -315,9 +328,10 @@ void bt_hci_host_num_completed_packets(struct net_buf *buf)
 		return;
 	}
 
-	if (conn->state != BT_CONN_CONNECTED &&
-	    conn->state != BT_CONN_DISCONNECTING) {
-		LOG_WRN("Not reporting packet for non-connected conn");
+	if (conn->handle != handle ||
+	    (conn->state != BT_CONN_CONNECTED &&
+	     conn->state != BT_CONN_DISCONNECTING)) {
+		LOG_WRN("Not reporting packet for stale/non-connected conn");
 		bt_conn_unref(conn);
 		return;
 	}
@@ -419,7 +433,7 @@ static bool process_pending_cmd(k_timeout_t timeout);
 int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
 			 struct net_buf **rsp)
 {
-	static struct k_sem sync_sem = { 0 };
+	struct k_sem *sync_sem;
 	uint8_t status;
 	int err;
 
@@ -442,8 +456,9 @@ int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
 	 * command is processed by the LL. It is given (and we are awaken) by
 	 * the cmd_complete/status handlers.
 	 */
-	k_sem_init(&sync_sem, 0, 1);
-	cmd(buf)->sync = &sync_sem;
+	sync_sem = &cmd_sync_sems[net_buf_id(buf)];
+	k_sem_init(sync_sem, 0, 1);
+	cmd(buf)->sync = sync_sem;
 
 	err = bt_hci_cmd_send(opcode, net_buf_ref(buf));
 	if (err) {
@@ -482,7 +497,7 @@ int bt_hci_cmd_send_sync(uint16_t opcode, struct net_buf *buf,
 	}
 
 	/* Now that we have sent the command, suspend until the LL replies */
-	err = k_sem_take(&sync_sem, HCI_CMD_TIMEOUT);
+	err = k_sem_take(sync_sem, HCI_CMD_TIMEOUT);
 	BT_ASSERT_MSG(err == 0,
 		      "Controller unresponsive, command opcode 0x%04x timeout with err %d",
 		      opcode, err);
@@ -4714,6 +4729,9 @@ int bt_enable(bt_ready_cb_t cb)
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
 		err = bt_settings_init();
 		if (err) {
+			/* No HCI resources have been opened yet. Allow retry after
+			 * the settings backend becomes available. */
+			atomic_clear_bit(bt_dev.flags, BT_DEV_ENABLE);
 			return err;
 		}
 	} else if (IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {

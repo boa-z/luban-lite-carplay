@@ -21,13 +21,22 @@
 #define LWIP_TIMERS                     1
 #define LWIP_TIMERS_CUSTOM              0
 #define LWIP_MPU_COMPATIBLE             0
+#define LWIP_MDNS_RESPONDER               1
+#define LWIP_POSIX_SOCKETS_IO_NAMES     1
+#define SO_REUSE                        1
+#define LWIP_HAVE_LOOPIF                1
+#define LWIP_NUM_NETIF_CLIENT_DATA        1
+#define LWIP_NETIF_TX_SINGLE_PBUF         1
+#define LWIP_SO_SNDTIMEO                  1
+#define LWIP_SO_RCVTIMEO                  1
+#define LWIP_TCP_KEEPALIVE                1
+#define LWIP_SO_SNDRCVTIMEO_NONSTANDARD   1
 
-#define LWIP_NETIF_LINK_CALLBACK        1
 /*
    ----------- Core locking -----------
 */
 #define LWIP_TCPIP_CORE_LOCKING         1
-#define LWIP_TCPIP_CORE_LOCKING_INPUT   0
+#define LWIP_TCPIP_CORE_LOCKING_INPUT   1
 #define SYS_LIGHTWEIGHT_PROT            1
 
 /*
@@ -35,8 +44,8 @@
 */
 /* If MEM_LIBC_MALLOC and MEMP_MEM_MALLOC are defined to 1,
 MEM_SIZE and MEMP_NUM_XXX will be invalid */
-#define MEM_LIBC_MALLOC                 0
-#define MEMP_MEM_MALLOC                 0
+#define MEM_LIBC_MALLOC                 1
+#define MEMP_MEM_MALLOC                 1
 #define MEMP_MEM_INIT                   0
 #define MEM_ALIGNMENT                   4
 
@@ -174,6 +183,10 @@ MEM_SIZE and MEMP_NUM_XXX will be invalid */
 #define LWIP_DHCP_MAX_NTP_SERVERS       1
 #define LWIP_DHCP_MAX_DNS_SERVERS       DNS_MAX_SERVERS
 
+#define LWIP_NETBUF_RECVINFO            1
+#define LWIP_NETIF_API                  1
+#define LWIP_NETIF_HOSTNAME             1
+
 /*
    ---------- AUTOIP options ----------
 */
@@ -208,16 +221,8 @@ MEM_SIZE and MEMP_NUM_XXX will be invalid */
 #define LWIP_DNS_SECURE (LWIP_DNS_SECURE_NO_MULTIPLE_OUTSTANDING | LWIP_DNS_SECURE_RAND_SRC_PORT)
 #define DNS_LOCAL_HOSTLIST              0
 #define DNS_LOCAL_HOSTLIST_IS_DYNAMIC   0
-
-#ifdef LPKG_LWIP_MDNS
-#define LWIP_DNS_SUPPORT_MDNS_QUERIES   1
-#define LWIP_MDNS_RESPONDER             1
-#define LWIP_NUM_NETIF_CLIENT_DATA      1
-#else
 #define LWIP_DNS_SUPPORT_MDNS_QUERIES   0
-#define LWIP_MDNS_RESPONDER             0
-#define LWIP_NUM_NETIF_CLIENT_DATA      0
-#endif
+
 /*
    ---------- UDP options ----------
 */
@@ -228,7 +233,6 @@ MEM_SIZE and MEMP_NUM_XXX will be invalid */
 #endif
 #define LWIP_UDPLITE                    0
 #define UDP_TTL                         (IP_DEFAULT_TTL)
-#define LWIP_NETBUF_RECVINFO            0
 
 /*
    ---------- TCP options ----------
@@ -275,6 +279,7 @@ MEM_SIZE and MEMP_NUM_XXX will be invalid */
 #define LWIP_TCP_PCB_NUM_EXT_ARGS       0
 #define LWIP_ALTCP                      0
 #define LWIP_ALTCP_TLS                  0
+#define LWIP_LISTEN_BACKLOG             1
 
 /*
    ---------- Pbuf options ----------
@@ -380,7 +385,6 @@ MEM_SIZE and MEMP_NUM_XXX will be invalid */
 #ifndef LWIP_SO_RCVBUF
 #define LWIP_SO_RCVBUF                  1
 #endif
-#define LWIP_SO_SNDRCVTIMEO_NONSTANDARD 0
 #define LWIP_SO_LINGER                  0
 /**
  * If LWIP_SO_RCVBUF is used, this is the default value for recv_bufsize.
@@ -660,12 +664,6 @@ MEM_SIZE and MEMP_NUM_XXX will be invalid */
 #else
 #define TCP_RST_DEBUG                   LWIP_DBG_OFF
 #endif
-#ifdef LPKG_LWIP_MDNS_DEBUG
-#define MDNS_DEBUG                       LWIP_DBG_ON
-#else
-#define MDNS_DEBUG                       LWIP_DBG_OFF
-#endif
-
 #endif /* LWIP_DEBUG */
 #define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_ALL
 #define LWIP_DBG_TYPES_ON               (LWIP_DBG_ON|LWIP_DBG_TRACE|LWIP_DBG_STATE|LWIP_DBG_FRESH|LWIP_DBG_HALT)

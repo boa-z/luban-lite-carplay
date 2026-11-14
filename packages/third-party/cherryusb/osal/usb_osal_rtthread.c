@@ -5,28 +5,31 @@
  */
 #include "usb_osal.h"
 #include "usb_errno.h"
+#include "usb_config.h"
+#include "usb_log.h"
 #include <rtthread.h>
 #include <rthw.h>
-#include <aic_osal.h>
 
 usb_osal_thread_t usb_osal_thread_create(const char *name, uint32_t stack_size, uint32_t prio, usb_thread_entry_t entry, void *args)
 {
     rt_thread_t htask;
-
     htask = rt_thread_create(name, entry, args, stack_size, prio, 10);
-    if (htask == NULL)
+    if (htask == NULL) {
         return NULL;
-
+    }
     rt_thread_startup(htask);
-
     return (usb_osal_thread_t)htask;
 }
 
 void usb_osal_thread_delete(usb_osal_thread_t thread)
 {
     if (thread == NULL) {
+#if (RTTHREAD_VERSION >= RT_VERSION_CHECK(3, 1, 5))
         rt_thread_t self = rt_thread_self();
         rt_thread_control(self, RT_THREAD_CTRL_CLOSE, RT_NULL);
+#else
+        rt_thread_exit();
+#endif
         return;
     }
 
@@ -49,9 +52,15 @@ void usb_osal_thread_schedule_other(void)
 
     rt_thread_control(self, RT_THREAD_CTRL_CHANGE_PRIORITY, (void *)&old_priority);
 }
+
 usb_osal_sem_t usb_osal_sem_create(uint32_t initial_count)
 {
     return (usb_osal_sem_t)rt_sem_create("usbh_sem", initial_count, RT_IPC_FLAG_FIFO);
+}
+
+usb_osal_sem_t usb_osal_sem_create_counting(uint32_t max_count)
+{
+    return usb_osal_sem_create(0);
 }
 
 void usb_osal_sem_delete(usb_osal_sem_t sem)
@@ -150,66 +159,39 @@ int usb_osal_mq_recv(usb_osal_mq_t mq, uintptr_t *addr, uint32_t timeout)
     return (int)ret;
 }
 
-usb_osal_event_t usb_osal_event_creat(const char *name)
-{
-    return (rt_event_t)rt_event_create(name, RT_IPC_FLAG_FIFO);
-}
-
-void usb_osal_event_delete(usb_osal_event_t event)
-{
-    rt_event_delete((rt_event_t)event);
-}
-
-int usb_osal_event_send(usb_osal_event_t event, uint32_t set)
-{
-    return rt_event_send((rt_event_t)event, set);
-}
-
-int usb_osal_event_recv(usb_osal_event_t event, uint32_t  set, uint8_t option,
-                        int32_t timeout, uint32_t *recved)
-{
-    uint8_t rt_opt = 0;
-
-    if (option & USB_OSAL_EVENT_FLAG_AND)
-        rt_opt |= RT_EVENT_FLAG_AND;
-
-    if (option & USB_OSAL_EVENT_FLAG_OR)
-        rt_opt |= RT_EVENT_FLAG_OR;
-
-    if (option & USB_OSAL_EVENT_FLAG_CLEAR)
-        rt_opt |= RT_EVENT_FLAG_CLEAR;
-
-    return rt_event_recv((rt_event_t)event, set, rt_opt, timeout, recved);
-}
-
 struct usb_osal_timer *usb_osal_timer_create(const char *name, uint32_t timeout_ms, usb_timer_handler_t handler, void *argument, bool is_period)
 {
     struct usb_osal_timer *timer;
 
     timer = rt_malloc(sizeof(struct usb_osal_timer));
-
+    if (timer == NULL) {
+        return NULL;
+    }
     memset(timer, 0, sizeof(struct usb_osal_timer));
 
     timer->timer = (void *)rt_timer_create(name, handler, argument, timeout_ms, is_period ? (RT_TIMER_FLAG_PERIODIC | RT_TIMER_FLAG_SOFT_TIMER) : (RT_TIMER_FLAG_ONE_SHOT | RT_TIMER_FLAG_SOFT_TIMER));
-
+    if (timer->timer == NULL) {
+        rt_free(timer);
+        return NULL;
+    }
     return timer;
 }
 
 void usb_osal_timer_delete(struct usb_osal_timer *timer)
 {
-    rt_timer_stop((rt_timer_t)timer->timer);
-    rt_timer_delete((rt_timer_t)timer->timer);
+    rt_timer_stop(timer->timer);
+    rt_timer_delete(timer->timer);
     rt_free(timer);
 }
 
 void usb_osal_timer_start(struct usb_osal_timer *timer)
 {
-    rt_timer_start((rt_timer_t)(timer->timer));
+    rt_timer_start(timer->timer);
 }
 
 void usb_osal_timer_stop(struct usb_osal_timer *timer)
 {
-    rt_timer_stop((rt_timer_t)(timer->timer));
+    rt_timer_stop(timer->timer);
 }
 
 size_t usb_osal_enter_critical_section(void)
@@ -225,16 +207,6 @@ void usb_osal_leave_critical_section(size_t flag)
 void usb_osal_msleep(uint32_t delay)
 {
     rt_thread_mdelay(delay);
-}
-
-void *usb_osal_malloc_align(uint32_t mem_type, size_t size, size_t align)
-{
-    return aicos_malloc_align(mem_type, size, align);
-}
-
-void usb_osal_free_align(uint32_t mem_type, void *mem)
-{
-    aicos_free_align(mem_type, mem);
 }
 
 void *usb_osal_malloc(size_t size)

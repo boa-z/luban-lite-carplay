@@ -248,6 +248,8 @@ static int h264_alloc_frame_buffer(struct h264_dec_ctx *s)
 	cfg.pixel_format = s->pix_format;
 	cfg.allocator = s->decoder.allocator;
 	s->decoder.fm = fm_create(&cfg);
+	if (!s->decoder.fm)
+		return -1;
 
 	if (s->max_width && s->max_height) {
 		pic_mb_width = (s->max_width + 15)/ 16;
@@ -558,11 +560,15 @@ int h264_decode_pps(struct h264_dec_ctx *s)
 	pps = s->pps_buffers[pps_id];
 
 	pps->sps_id = read_ue_golomb(&s->gb);
-	if(pps->sps_id >= SPS_MAX_NUM) {
+	if(pps->sps_id < 0 || pps->sps_id >= SPS_MAX_NUM) {
 		loge("sps id error(%d)", pps->sps_id);
 		return -1;
 	}
 	sps = s->sps_buffers[pps->sps_id];
+	if (!sps) {
+		loge("PPS references missing SPS %d", pps->sps_id);
+		return -1;
+	}
 	logd("PPS: sps_id: %d", pps->sps_id);
 
 	pps->entropy_coding_flag = read_bits(&s->gb, 1);
@@ -938,6 +944,10 @@ int h264_decode_slice_header(struct h264_dec_ctx *s)
 	s->active_sps_id = s->pps_buffers[s->active_pps_id]->sps_id;
 	cur_sps = s->sps_buffers[s->active_sps_id];
 	cur_pps = s->pps_buffers[s->active_pps_id];
+	if (!cur_sps) {
+		s->error = H264_DECODER_ERROR_SPS;
+		return -1;
+	}
 
 	width = cur_sps->pic_mb_width * 16;
 	height = cur_sps->pic_mb_height * (2-cur_sps->frame_mbs_only_flag) * 16;
@@ -958,8 +968,17 @@ int h264_decode_slice_header(struct h264_dec_ctx *s)
 	s->height = height;
 
 	// 1. alloc frame buffer if it is the first time
-	if(s->frame_info.max_valid_frame_num == 0)
-		h264_alloc_frame_buffer(s);
+	if(s->frame_info.max_valid_frame_num == 0) {
+		if (h264_alloc_frame_buffer(s) != 0)
+			return -1;
+	}
+	/* An earlier allocation failure must not enter hardware decoding on
+	 * the next slice with only part of the frame buffers initialized. */
+	if (!s->decoder.fm || !s->frame_info.col_buf ||
+	    !s->frame_info.dblk_y_buf || !s->frame_info.dblk_c_buf ||
+	    !s->frame_info.intrap_buf || !s->frame_info.mb_info_buf ||
+	    !s->frame_info.mb_col_info_buf)
+		return -1;
 
 	sh->frame_num = read_bits(&s->gb, cur_sps->log2_max_frm_num);
 	s->frame_num = sh->frame_num;

@@ -4,15 +4,15 @@
 
 ### BouffaloLab
 
-- BouffaloLab BL616/BL808
+- BouffaloLab BL616/BL808 (fotg210 + EHCI)
 
 ### HPMicro
 
-- HPM all series
+- HPM all series (chipidea + EHCI)
 
 ### AllwinnerTech
 
-- F133
+- Except F1Cxxx, F2Cxxx (musb + EHCI+ OHCI)
 
 ### Nuvoton
 
@@ -20,15 +20,19 @@
 
 ### Artinchip
 
-- d13x, d21x
+- ALL series (aic + EHCI + OHCI)
+
+### NXP
+
+Modify USB_NOCACHE_RAM_SECTION
+
+```
+#define USB_NOCACHE_RAM_SECTION __attribute__((section(".NonCacheable")))
+```
+
+- IMRT10XX/IMRT11XX (chipidea + EHCI)
+- MCXN9XX/MCXN236 (chipidea + EHCI)
 
 ### Intel
 
-Intel 6 Series Chipset and Intel C200 Series Chipset
-
-## Before Use
-
-Your should implement `usb_hc_low_level_init`.
-- Enable USB PHY、USB clock and set USB clock for 48M.
-- Enable usb irq
-- Config EHCI BASE and other macros in `cherryusb_config_tempate.h`
+- Intel 6 Series Chipset and Intel C200 Series Chipset

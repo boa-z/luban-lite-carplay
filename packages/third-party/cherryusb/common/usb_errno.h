@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2024, sakumisu
+ * Copyright (c) 2023, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -15,12 +15,10 @@
 #define USB_ERR_RANGE    7
 #define USB_ERR_STALL    8
 #define USB_ERR_BABBLE   9
-#define USB_ERR_NAK      10
+#define USB_ERR_NAK      10 /* only for dwc2 buffer dma mode */
 #define USB_ERR_DT       11
 #define USB_ERR_IO       12
 #define USB_ERR_SHUTDOWN 13
 #define USB_ERR_TIMEOUT  14
-#define USB_ERR_ALIGN    15
-#define USB_ERR_UNDERFLOAW 16
 
 #endif /* USB_ERRNO_H */

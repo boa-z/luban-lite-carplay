@@ -238,6 +238,11 @@ src += lwipcore4_SRCS
 path = [cwd + '/src/include',
     cwd + '/src/include/netif']
 
+# mDNS responder (CarPlay/Bonjour discovery).  mdns.c compiles to an empty
+# translation unit when LWIP_MDNS_RESPONDER is 0, so this is safe for configs
+# that do not enable it.
+src += lwipmdns_SRCS
+
 if not GetDepend('RT_USING_SAL'):
     path += [cwd + '/src/include/compat/posix']
 

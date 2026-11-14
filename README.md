@@ -1,4 +1,10 @@
-# Luban-Lite SDK
+# Luban-Lite CarPlay
+
+本仓库为 [boa-z/luban-lite-carplay](https://github.com/boa-z/luban-lite-carplay)，默认开发分支 `carplay-oss`，上游主线为 [boa-z/luban-lite/master](https://github.com/boa-z/luban-lite/tree/master)。CarPlay 集成已迁出原 `jiachenin/luban-lite-jc` 开发线。
+
+支持 D213 RT-Thread 的 GUI 与 Headless 方案，CI 从本仓库编译裸机 Bootloader 和应用，上传完整 IMG、配置、版本清单与 SHA256。获取、构建和产物使用方法见 [CI 文档](application/rt-thread/rtcarplay/docs/zh-CN/ci.md)（[English](application/rt-thread/rtcarplay/docs/ci.md)）。CI 构建通过与开发板验收分别记录。
+
+CarPlay SDK 与 Apple Ethernet 驱动继续通过子模块独立维护；其各自许可证和第三方声明仍适用。下文保留通用 Luban-Lite SDK 说明。
 
 Luban-Lite 是匠芯创(ArtInChip)科技有限公司的嵌入式 RTOS SDK，旨在为 ArtInChip 系列芯片提供完整的软件开发环境。
 
@@ -277,6 +283,7 @@ vTaskDelay(100);           // 直接调用 FreeRTOS API
 | [AGENTS.md](AGENTS.md) | AI Agent 入口文档（构建命令、约定、流程） |
 | [CODEMAP.md](CODEMAP.md) | 源码文件地图（精确路径索引） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发流程 Checklist |
+| [application/rt-thread/rtcarplay/README.md](application/rt-thread/rtcarplay/README.md) | CarPlay 接收应用（D213，USB/无线；`rt-carplay` 与 `cherryusb-ipheth` 为 git submodule） |
 
 ## 在线文档
 

@@ -23,8 +23,6 @@ void usbd_video_close(uint8_t busid, uint8_t intf);
 
 bool usbd_video_stream_split_transfer(uint8_t busid, uint8_t ep);
 int usbd_video_stream_start_write(uint8_t busid, uint8_t ep, uint8_t *ep_buf, uint8_t *stream_buf, uint32_t stream_len, bool do_copy);
-int video_set_camera_terminal_control(struct video_vc_input_terminal_bmcontrol_bitmap* bitmap, uint8_t *desc);
-int video_set_processing_uint(struct video_vc_processing_unit_bmcontrol_bitmap* bitmap, uint8_t *desc);
 
 #ifdef __cplusplus
 }

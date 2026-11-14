@@ -462,6 +462,28 @@ void bt_hci_link_key_notify(struct net_buf *buf)
 
 	LOG_DBG("%s, link type 0x%02x", bt_addr_str(&evt->bdaddr), evt->key_type);
 
+	/* Core Vol 2, Part E, Link Key Notification: type 0x06 updates
+	 * the existing combination key and retains its authentication/type.
+	 * Treating it as an unknown type used to persist an all-zero key,
+	 * making the next bonded reconnect fail while fresh pairing worked. */
+	if (evt->key_type == BT_LK_CHANGED_COMBINATION) {
+		if (!conn->br.link_key) {
+			conn->br.link_key = bt_keys_find_link_key(&evt->bdaddr);
+		}
+		if (!conn->br.link_key ||
+		    (IS_ENABLED(CONFIG_BT_SMP_SC_ONLY) &&
+		     (conn->br.link_key->flags & (BT_LINK_KEY_SC | BT_LINK_KEY_AUTHENTICATED)) !=
+		     (BT_LINK_KEY_SC | BT_LINK_KEY_AUTHENTICATED))) {
+			LOG_ERR("BR key update rejected: missing or incompatible original key");
+			bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
+			bt_conn_unref(conn);
+			return;
+		}
+		memcpy(conn->br.link_key->val, evt->link_key, 16);
+		LOG_INF("BR combination key updated for %s", bt_addr_str(&evt->bdaddr));
+		goto store_key;
+	}
+
 	if (IS_ENABLED(CONFIG_BT_SMP_SC_ONLY) && (evt->key_type != BT_LK_AUTH_COMBINATION_P256)) {
 		/*
 		 * When in Secure Connections Only mode, all services
@@ -479,17 +501,7 @@ void bt_hci_link_key_notify(struct net_buf *buf)
 		return;
 	}
 
-	if (!conn->br.link_key) {
-		conn->br.link_key = bt_keys_get_link_key(&evt->bdaddr);
-	}
-	if (!conn->br.link_key) {
-		LOG_ERR("Can't update keys for %s", bt_addr_str(&evt->bdaddr));
-		bt_conn_unref(conn);
-		return;
-	}
-
-	/* clear any old Link Key flags */
-	conn->br.link_key->flags = 0U;
+	uint8_t key_flags = 0U;
 
 	switch (evt->key_type) {
 	case BT_LK_COMBINATION:
@@ -499,31 +511,38 @@ void bt_hci_link_key_notify(struct net_buf *buf)
 		 */
 		if (atomic_test_and_clear_bit(conn->flags,
 					      BT_CONN_BR_LEGACY_SECURE)) {
-			conn->br.link_key->flags |= BT_LINK_KEY_AUTHENTICATED;
+			key_flags |= BT_LINK_KEY_AUTHENTICATED;
 		}
-		memcpy(conn->br.link_key->val, evt->link_key, 16);
 		break;
 	case BT_LK_AUTH_COMBINATION_P192:
-		conn->br.link_key->flags |= BT_LINK_KEY_AUTHENTICATED;
+		key_flags |= BT_LINK_KEY_AUTHENTICATED;
 		__fallthrough;
 	case BT_LK_UNAUTH_COMBINATION_P192:
-		memcpy(conn->br.link_key->val, evt->link_key, 16);
 		break;
 	case BT_LK_AUTH_COMBINATION_P256:
-		conn->br.link_key->flags |= BT_LINK_KEY_AUTHENTICATED;
+		key_flags |= BT_LINK_KEY_AUTHENTICATED;
 		__fallthrough;
 	case BT_LK_UNAUTH_COMBINATION_P256:
-		conn->br.link_key->flags |= BT_LINK_KEY_SC;
-
-		memcpy(conn->br.link_key->val, evt->link_key, 16);
+		key_flags |= BT_LINK_KEY_SC;
 		break;
 	default:
 		LOG_WRN("Unsupported Link Key type %u", evt->key_type);
-		(void)memset(conn->br.link_key->val, 0,
-			     sizeof(conn->br.link_key->val));
-		break;
+		bt_conn_disconnect(conn, BT_HCI_ERR_AUTH_FAIL);
+		bt_conn_unref(conn);
+		return;
 	}
+	if (!conn->br.link_key) {
+		conn->br.link_key = bt_keys_get_link_key(&evt->bdaddr);
+	}
+	if (!conn->br.link_key) {
+		LOG_ERR("Can't update keys for %s", bt_addr_str(&evt->bdaddr));
+		bt_conn_unref(conn);
+		return;
+	}
+	conn->br.link_key->flags = key_flags;
+	memcpy(conn->br.link_key->val, evt->link_key, 16);
 
+store_key:
 	if (IS_ENABLED(CONFIG_BT_SETTINGS) &&
 	    !atomic_test_bit(conn->flags, BT_CONN_BR_NOBOND)) {
 		bt_keys_link_key_store(conn->br.link_key);
@@ -588,6 +607,7 @@ void bt_hci_link_key_req(struct net_buf *buf)
 	}
 
 	if (!conn->br.link_key) {
+		LOG_WRN("BR reconnect: no saved link key for %s", bt_addr_str(&evt->bdaddr));
 		link_key_neg_reply(&evt->bdaddr);
 		bt_conn_unref(conn);
 		return;
@@ -599,11 +619,14 @@ void bt_hci_link_key_req(struct net_buf *buf)
 	 */
 	if (!(conn->br.link_key->flags & BT_LINK_KEY_AUTHENTICATED) &&
 	    conn->required_sec_level > BT_SECURITY_L2) {
+		LOG_WRN("BR reconnect: saved key insufficient for security level %u",
+			(unsigned)conn->required_sec_level);
 		link_key_neg_reply(&evt->bdaddr);
 		bt_conn_unref(conn);
 		return;
 	}
 
+	LOG_INF("BR reconnect: replying with saved link key for %s", bt_addr_str(&evt->bdaddr));
 	link_key_reply(&evt->bdaddr, conn->br.link_key->val);
 	bt_conn_unref(conn);
 }
@@ -884,6 +907,7 @@ void bt_hci_auth_complete(struct net_buf *buf)
 	uint16_t handle = sys_le16_to_cpu(evt->handle);
 
 	LOG_DBG("status 0x%02x, handle %u", evt->status, handle);
+	LOG_INF("BR authentication complete: status=0x%02x handle=%u", evt->status, handle);
 
 	conn = bt_conn_lookup_handle(handle, BT_CONN_TYPE_BR);
 	if (!conn) {

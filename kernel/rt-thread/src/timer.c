@@ -296,6 +296,20 @@ rt_err_t rt_timer_detach(rt_timer_t timer)
     RT_ASSERT(rt_object_get_type(&timer->parent) == RT_Object_Class_Timer);
     RT_ASSERT(rt_object_is_systemobject(&timer->parent));
 
+    /*
+     * RT_ASSERT() is compiled out in release builds.  A stale timer pointer
+     * (already detached/deleted, or a heap block reused for something else)
+     * must not be detached twice: the second detach would corrupt the object
+     * list.  Detect the stale handle at run time instead.
+     */
+    if (timer == RT_NULL ||
+        rt_object_get_type(&timer->parent) != RT_Object_Class_Timer)
+    {
+        rt_kprintf("[TIMER] detach of stale timer %p (type=%d), ignored\n",
+                   timer, timer ? rt_object_get_type(&timer->parent) : -1);
+        return -RT_ERROR;
+    }
+
     /* disable interrupt */
     level = rt_hw_interrupt_disable();
 
@@ -380,6 +394,19 @@ rt_err_t rt_timer_delete(rt_timer_t timer)
     RT_ASSERT(rt_object_get_type(&timer->parent) == RT_Object_Class_Timer);
     RT_ASSERT(rt_object_is_systemobject(&timer->parent) == RT_FALSE);
 
+    /*
+     * A double delete (or a delete of an already reused heap block) frees
+     * the same memory twice and later lets the Timer object list point at a
+     * block that has been reused as a thread stack.  Reject stale handles.
+     */
+    if (timer == RT_NULL ||
+        rt_object_get_type(&timer->parent) != RT_Object_Class_Timer)
+    {
+        rt_kprintf("[TIMER] delete of stale timer %p (type=%d), ignored\n",
+                   timer, timer ? rt_object_get_type(&timer->parent) : -1);
+        return -RT_ERROR;
+    }
+
     /* disable interrupt */
     level = rt_hw_interrupt_disable();
 
@@ -417,6 +444,11 @@ rt_err_t rt_timer_start(rt_timer_t timer)
     /* parameter check */
     RT_ASSERT(timer != RT_NULL);
     RT_ASSERT(rt_object_get_type(&timer->parent) == RT_Object_Class_Timer);
+
+    /* stale handle (detached/deleted, or memory reused): do not touch lists */
+    if (timer == RT_NULL ||
+        rt_object_get_type(&timer->parent) != RT_Object_Class_Timer)
+        return -RT_ERROR;
 
     need_schedule = RT_FALSE;
 
@@ -537,6 +569,11 @@ rt_err_t rt_timer_stop(rt_timer_t timer)
     /* parameter check */
     RT_ASSERT(timer != RT_NULL);
     RT_ASSERT(rt_object_get_type(&timer->parent) == RT_Object_Class_Timer);
+
+    /* stale handle (detached/deleted, or memory reused): do not touch lists */
+    if (timer == RT_NULL ||
+        rt_object_get_type(&timer->parent) != RT_Object_Class_Timer)
+        return -RT_ERROR;
 
     if (!(timer->parent.flag & RT_TIMER_FLAG_ACTIVATED))
         return -RT_ERROR;

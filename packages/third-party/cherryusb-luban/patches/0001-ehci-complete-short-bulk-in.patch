@@ -1,0 +1,67 @@
+--- a/port/ehci/usb_hc_ehci.c
++++ b/port/ehci/usb_hc_ehci.c
+@@ -484,7 +484,7 @@
+                  ((uint32_t)EHCI_TUNE_CERR << QTD_TOKEN_CERR_SHIFT) |
+                  ((uint32_t)xfer_len << QTD_TOKEN_NBYTES_SHIFT);
+ 
+-        if (buflen == 0) {
++        if (buflen == 0 || (urb->ep->bEndpointAddress & 0x80)) {
+             token |= QTD_TOKEN_IOC;
+         }
+ 
+@@ -678,6 +678,17 @@
+     }
+ }
+ 
++/* A short bulk IN follows alt_next_qtd (terminate), leaving later qTDs
++ * active. Errors also halt execution before the rest of the software chain.
++ * Control IN short data must still complete its status stage. */
++static bool ehci_qtd_ends_urb(const struct usbh_urb *urb, uint32_t token)
++{
++    return (token & QTD_TOKEN_STATUS_ERRORS) ||
++           (USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_BULK &&
++            (urb->ep->bEndpointAddress & 0x80) &&
++            (token & QTD_TOKEN_NBYTES_MASK));
++}
++
+ static void ehci_qh_scan_qtds(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
+ {
+     struct ehci_qtd_hw *qtd;
+@@ -689,7 +700,17 @@
+     qtd = EHCI_ADDR2QTD(qh->first_qtd);
+ 
+     while (qtd) {
+-        qtd->urb->actual_length += (qtd->length - ((qtd->hw.token & QTD_TOKEN_NBYTES_MASK) >> QTD_TOKEN_NBYTES_SHIFT));
++#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
++        usb_dcache_invalidate((uintptr_t)&qtd->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
++#endif
++        uint32_t token = qtd->hw.token;
++        if (token & QTD_TOKEN_STATUS_ACTIVE) {
++            break;
++        }
++        qtd->urb->actual_length += (qtd->length - ((token & QTD_TOKEN_NBYTES_MASK) >> QTD_TOKEN_NBYTES_SHIFT));
++        if (ehci_qtd_ends_urb(qtd->urb, token)) {
++            break;
++        }
+ 
+         qtd = EHCI_ADDR2QTD(qtd->hw.next_qtd);
+     }
+@@ -716,12 +737,18 @@
+         if (token & QTD_TOKEN_STATUS_ACTIVE) {
+             return;
+         }
++        if (ehci_qtd_ends_urb(qh->urb, token)) {
++            break;
++        }
+ 
+         qtd = EHCI_ADDR2QTD(qtd->hw.next_qtd);
+     }
+ 
+     urb = qh->urb;
+ 
++#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
++    usb_dcache_invalidate((uintptr_t)&qh->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
++#endif
+     urb->data_toggle = (qh->hw.overlay.token & QTD_TOKEN_TOGGLE) != 0;
+ 
+     if ((token & QTD_TOKEN_STATUS_ERRORS) == 0) {

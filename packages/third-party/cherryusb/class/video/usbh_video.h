@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2025, sakumisu
+ * Copyright (c) 2022, sakumisu
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,22 +8,25 @@
 
 #include "usb_video.h"
 
-#define USBH_VIDEO_FORMAT_UNCOMPRESSED BIT(0)
-#define USBH_VIDEO_FORMAT_MJPEG        BIT(1)
-#define USBH_VIDEO_FORMAT_H264         BIT(2)
-#define USBH_VIDEO_FORMAT_UNCOMPRESSED_YUY2 ((1 << 4) | USBH_VIDEO_FORMAT_UNCOMPRESSED)
-#define USBH_VIDEO_FORMAT_UNCOMPRESSED_NV12 ((1 << 5) | USBH_VIDEO_FORMAT_UNCOMPRESSED)
+#define USBH_VIDEO_FORMAT_UNCOMPRESSED 0
+#define USBH_VIDEO_FORMAT_MJPEG        1
 
-#define UVC_GET_FORMAT(x)           ((x) & 0xf)
-#define UVC_GET_SUBFORMAT(x)        ((x >> 4) & 0xf)
+#ifndef CONFIG_USBHOST_VIDEO_MAX_FRAMES
+#define CONFIG_USBHOST_VIDEO_MAX_FRAMES 12
+#endif
+
+#ifndef CONFIG_USBHOST_VIDEO_MAX_FORMATS
+#define CONFIG_USBHOST_VIDEO_MAX_FORMATS 3
+#endif
+
 struct usbh_video_resolution {
     uint16_t wWidth;
     uint16_t wHeight;
+    uint32_t dwDefaultFrameInterval;
 };
 
 struct usbh_video_format {
-    struct usbh_video_resolution frame[36];
-    char format_type_name[5];
+    struct usbh_video_resolution frame[CONFIG_USBHOST_VIDEO_MAX_FRAMES];
     uint8_t format_type;
     uint8_t num_of_frames;
 };
@@ -33,7 +36,6 @@ struct usbh_videoframe {
     uint32_t frame_bufsize;
     uint32_t frame_format;
     uint32_t frame_size;
-    uint8_t index;
 };
 
 struct usbh_videostreaming {
@@ -47,7 +49,7 @@ struct usbh_videostreaming {
 struct usbh_video {
     struct usbh_hubport *hport;
     struct usb_endpoint_descriptor *isoin;  /* ISO IN endpoint */
-    struct usb_endpoint_descriptor *isoout; /* ISO OUT endpoint */
+    struct usb_endpoint_descriptor *bulkin;  /* Bulk IN endpoint */
 
     uint8_t ctrl_intf; /* interface number */
     uint8_t data_intf; /* interface number */
@@ -55,13 +57,13 @@ struct usbh_video {
     struct video_probe_and_commit_controls probe;
     struct video_probe_and_commit_controls commit;
     uint16_t isoin_mps;
-    uint16_t isoout_mps;
     bool is_opened;
     uint8_t current_format;
+    bool is_bulk;
     uint16_t bcdVDC;
     uint8_t num_of_intf_altsettings;
     uint8_t num_of_formats;
-    struct usbh_video_format format[3];
+    struct usbh_video_format format[CONFIG_USBHOST_VIDEO_MAX_FORMATS];
 
     void *user_data;
 };

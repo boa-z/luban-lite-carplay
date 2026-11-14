@@ -1,0 +1,53 @@
+name: D213 firmware
+on:
+  push:
+    branches: [carplay-oss]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [gui, headless]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential patch dosfstools mtools device-tree-compiler u-boot-tools
+          python3 -m venv .ci-venv
+          .ci-venv/bin/pip install -r .ci/requirements.txt
+          echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
+      - name: Check baremetal OSAL and USB regressions
+        run: |
+          bash packages/third-party/cherryusb-luban/tests/run_baremetal.sh
+          bash packages/third-party/cherryusb-luban/tests/run.sh
+          bash packages/third-party/cherryusb-luban/tests/run_control_probe.sh
+      - name: Build Bootloader and complete IMG
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: bash .ci/build-firmware.sh '${{ matrix.variant }}'
+      - name: Upload firmware and build identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: d213-carplay-${{ matrix.variant }}-${{ github.sha }}
+          path: output/ci/${{ matrix.variant }}/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d213-carplay-${{ matrix.variant }}-failure-logs
+          path: output/ci-logs/
+          if-no-files-found: ignore
