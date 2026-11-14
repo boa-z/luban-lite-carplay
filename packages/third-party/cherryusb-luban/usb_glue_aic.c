@@ -204,5 +204,3 @@ void usb_dcache_flush(uintptr_t addr, size_t len)
 {
     aicos_dcache_clean_invalid_range((size_t *)addr, len);
 }
-
-

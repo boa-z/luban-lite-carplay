@@ -9,7 +9,11 @@
 #include "usb_otg.h"
 #include "usbd_core.h"
 #include "usbh_core.h"
-extern void usb_luban_device_event(uint8_t busid, uint8_t event);
+static void usb_otg_device_event(uint8_t busid, uint8_t event)
+{
+    (void)busid;
+    (void)event;
+}
 #if defined(KERNEL_RTTHREAD)
 #include <rtdevice.h>
 #include <rtthread.h>
@@ -273,7 +277,7 @@ static void usb_otg_start_device(unsigned char on)
 
     if (on) {
 #ifdef LPKG_CHERRYUSB_DEVICE
-        usbd_initialize(0, USB_DEV_BASE, usb_luban_device_event);
+        usbd_initialize(0, USB_DEV_BASE, usb_otg_device_event);
 #endif
     } else {
 #ifdef LPKG_CHERRYUSB_DEVICE
@@ -525,4 +529,3 @@ CONSOLE_CMD(get_otg_mode, cmd_get_otg_mode, "Get usb otg mode");
 #if defined(KERNEL_RTTHREAD)
 INIT_BOARD_EXPORT(usb_otg_init);
 #endif
-
