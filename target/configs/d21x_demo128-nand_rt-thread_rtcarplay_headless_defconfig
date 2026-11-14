@@ -192,3 +192,6 @@ CONFIG_RTCARPLAY_DIR="../../../packages/third-party/rt-carplay"
 # CONFIG_RTCARPLAY_MICROPHONE is not set
 # CONFIG_RTCARPLAY_TOUCH_PANEL is not set
 # CONFIG_RTCARPLAY_VIDEO is not set
+
+# Cross-compile the independent SDK example without autostarting a second receiver.
+CONFIG_LPKG_RT_CARPLAY_HEADLESS_EXAMPLE=y
