@@ -25,6 +25,7 @@ mapfile -t images < <(find "output/${config%_defconfig}/images" -maxdepth 1 -typ
 if (( ${#images[@]} != 1 )); then
   echo "Expected one complete IMG, found ${#images[@]}" >&2; exit 1
 fi
+python3 .ci/verify-image.py "${images[0]}"
 cp "${images[0]}" "$dest/d213-carplay-$variant.img"
 cp "$pack/bootloader.bin" "$dest/bootloader.bin"
 cp .config "$dest/firmware.config"

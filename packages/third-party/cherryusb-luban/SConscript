@@ -152,7 +152,16 @@ if GetDepend(['LPKG_CHERRYUSB_DEVICE']) and GetDepend(['AIC_USB_DEVICE_DRV']):
 
     if GetDepend(['LPKG_CHERRYUSB_DEVICE_AIC']):
         src += usb_glob('port/aic/usb_dc_aic.c')
-        src += usb_glob('port/aic/usb_dc_aic_ll.c')
+        import building
+        def prepare_device_ll(target, source, env):
+            import subprocess, sys
+            return subprocess.call([sys.executable, str(source[2]),
+                                    str(source[0]), str(source[1]), str(target[0])])
+        src += building.Env.Command(os.path.join(cwd, 'generated/usb_dc_aic_ll.c'),
+            [os.path.join(root, 'port/aic/usb_dc_aic_ll.c'),
+             os.path.join(cwd, 'patches/0004-aic-device-irq-contract.patch'),
+             os.path.join(cwd, 'prepare_ehci.py')], prepare_device_ll)
+        path += [root + '/port/aic']
         src += Glob(os.path.join(cwd, 'usbd_baremetal.c')) if PRJ_KERNEL == 'baremetal' else []
 
     if GetDepend(['LPKG_CHERRYUSB_DEVICE_FSDEV']):
