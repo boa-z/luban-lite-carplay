@@ -195,3 +195,5 @@ CONFIG_RTCARPLAY_DIR="../../../packages/third-party/rt-carplay"
 
 # Cross-compile the independent SDK example without autostarting a second receiver.
 CONFIG_LPKG_RT_CARPLAY_HEADLESS_EXAMPLE=y
+
+CONFIG_RTCARPLAY_AUTO_CONNECT=y
