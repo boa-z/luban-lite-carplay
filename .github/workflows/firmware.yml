@@ -9,6 +9,19 @@ concurrency:
   group: firmware-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  host-regressions:
+    name: Luban-Lite adapters (ASan/UBSan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+      - name: Fetch portable SDK host cryptography dependency
+        run: packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
+      - name: Check actual composition, media, pairing and transports
+        run: make -C application/rt-thread/rtcarplay -j8 check
   firmware:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -34,9 +47,9 @@ jobs:
           bash packages/third-party/cherryusb-luban/tests/run.sh
           bash packages/third-party/cherryusb-luban/tests/run_control_probe.sh
       - name: Check video handoff and SDK framebuffer command ABI
-        run: make -C packages/third-party/rt-carplay check-lubanlite-video SDK_ROOT="$GITHUB_WORKSPACE"
+        run: make -C application/rt-thread/rtcarplay check-lubanlite-video SDK_ROOT="$GITHUB_WORKSPACE"
       - name: Check application connection manager and launcher input
-        run: make -C packages/third-party/rt-carplay check-lubanlite-demo SDK_ROOT="$GITHUB_WORKSPACE"
+        run: make -C application/rt-thread/rtcarplay check-lubanlite-demo SDK_ROOT="$GITHUB_WORKSPACE"
       - name: Build Bootloader and complete IMG
         env:
           PYTHONUNBUFFERED: '1'
