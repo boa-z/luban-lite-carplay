@@ -13,15 +13,16 @@
 #if defined(LPKG_CHERRYUSB_HOST_OHCI)
 #include "usb_hc_ohci.h"
 
-static void aic_ohci_isr(int vector, void *arg)
+static irqreturn_t aic_ohci_isr(int vector, void *arg)
 {
     struct usbh_bus *bus = (struct usbh_bus *)arg;
     extern void OHCI_IRQHandler(uint8_t busid);
     OHCI_IRQHandler(bus->busid);
+    return IRQ_HANDLED;
 }
 #endif
 
-static void aic_ehci_isr(int vector, void *arg)
+static irqreturn_t aic_ehci_isr(int vector, void *arg)
 {
     struct usbh_bus *bus = (struct usbh_bus *)arg;
 #ifdef RT_USING_FINSH
@@ -29,6 +30,7 @@ static void aic_ehci_isr(int vector, void *arg)
     ++aic_ehci_irqs[bus->busid];
 #endif
     USBH_IRQHandler(bus->busid);
+    return IRQ_HANDLED;
 }
 
 typedef struct aic_ehci_config {
@@ -143,11 +145,11 @@ void usb_hc_low_level_init(struct usbh_bus *bus)
     writel((32 | (127 << 16)), (volatile void *)(unsigned long)(config[i].base_addr+0x94));
 
     /* register interrupt callback */
-    aicos_request_irq(config[i].irq_num, (irq_handler_t)aic_ehci_isr,
+    aicos_request_irq(config[i].irq_num, aic_ehci_isr,
                        0, "usb_host_ehci", bus);
     aicos_irq_enable(config[i].irq_num);
 #if defined(LPKG_CHERRYUSB_HOST_OHCI)
-    aicos_request_irq(config[i].irq_num + 1, (irq_handler_t)aic_ohci_isr,
+    aicos_request_irq(config[i].irq_num + 1, aic_ohci_isr,
                       0, "usb_host_ohci", bus);
     aicos_irq_enable(config[i].irq_num + 1);
 #endif
