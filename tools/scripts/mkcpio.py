@@ -47,13 +47,15 @@ def generate_version(cfgfile):
 
 def modify_ota_cfg(cfgfile):
 
-    with open(cfgfile, "r") as f:
-        lines = f.readlines()
+    # Binary mode keeps the file LF-only on Windows. Text mode would rewrite
+    # every line as CRLF and leave this tracked config dirty after each build.
+    with open(cfgfile, "rb") as f:
+        lines = f.read().replace(b'\r\n', b'\n').splitlines(True)
 
     if lines:
-        lines[2] = generate_version(aic_pack_dir + '/image_cfg.json')
+        lines[2] = generate_version(aic_pack_dir + '/image_cfg.json').encode('utf-8')
 
-    with open(cfgfile, "w") as f:
+    with open(cfgfile, "wb") as f:
         f.writelines(lines)
 
 
