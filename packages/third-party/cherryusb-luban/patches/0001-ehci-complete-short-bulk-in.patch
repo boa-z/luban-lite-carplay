@@ -1,6 +1,62 @@
---- a/port/ehci/usb_hc_ehci.c
-+++ b/port/ehci/usb_hc_ehci.c
-@@ -484,7 +484,7 @@
+--- a/usb_hc_ehci.c
++++ b/usb_hc_ehci.c
+@@ -155,23 +155,48 @@
+ #endif
+ }
+ 
+-static inline void ehci_qh_remove(struct ehci_qh_hw *head, struct ehci_qh_hw *n)
+-{
++/* Caller excludes CPU-side list mutations. Cached predecessor link/overlay
++ * share a line: DMA must be quiescent before invalidate/edit/clean. IAA alone
++ * only protects reclamation, not this CPU writeback to another active QH. */
++static inline bool ehci_qh_remove(struct ehci_qh_hw *head, struct ehci_qh_hw *n)
++{
++    struct usbh_bus *bus = n->urb->hport->bus;
++    uint32_t enable = head == &g_async_qh_head[bus->hcd.hcd_id] ?
++        EHCI_USBCMD_ASEN : EHCI_USBCMD_PSEN;
++    uint32_t status = enable == EHCI_USBCMD_ASEN ? EHCI_USBSTS_ASS : EHCI_USBSTS_PSS;
++    uint32_t saved = EHCI_HCOR->usbcmd & enable;
++#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
++    EHCI_HCOR->usbcmd &= ~enable;
++    unsigned timeout = 200000U;
++    while ((EHCI_HCOR->usbsts & status) && --timeout) { }
++    if (!timeout) {
++        EHCI_HCOR->usbcmd |= saved;
++        return false; /* retain QH/URB/DMA ownership; never free active memory */
++    }
++#else
++    (void)status;
++#endif
+     struct ehci_qh_hw *tmp = head;
+-
+-    while (EHCI_ADDR2QH(tmp->hw.hlp) && EHCI_ADDR2QH(tmp->hw.hlp) != n) {
++    unsigned remaining = CONFIG_USB_EHCI_QH_NUM + 1U;
++    while (EHCI_ADDR2QH(tmp->hw.hlp) && EHCI_ADDR2QH(tmp->hw.hlp) != n && remaining--)
+         tmp = EHCI_ADDR2QH(tmp->hw.hlp);
+-    }
+-
+-    if (tmp) {
++    bool found = EHCI_ADDR2QH(tmp->hw.hlp) == n;
++    if (found) {
+ #if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
+         usb_dcache_invalidate((uintptr_t)&n->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
++        usb_dcache_invalidate((uintptr_t)&tmp->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
+ #endif
+         tmp->hw.hlp = n->hw.hlp;
+ #if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
+         usb_dcache_clean((uintptr_t)&tmp->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
+ #endif
+     }
++#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
++    EHCI_HCOR->usbcmd |= saved;
++#else
++    (void)saved;
++#endif
++    return found;
+ }
+ 
+ static int ehci_caculate_smask(int binterval)
+@@ -484,7 +509,7 @@
                   ((uint32_t)EHCI_TUNE_CERR << QTD_TOKEN_CERR_SHIFT) |
                   ((uint32_t)xfer_len << QTD_TOKEN_NBYTES_SHIFT);
  
@@ -9,10 +65,11 @@
              token |= QTD_TOKEN_IOC;
          }
  
-@@ -678,6 +678,17 @@
+@@ -678,21 +703,43 @@
      }
  }
  
+-static void ehci_qh_scan_qtds(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
 +/* A short bulk IN follows alt_next_qtd (terminate), leaving later qTDs
 + * active. Errors also halt execution before the rest of the software chain.
 + * Control IN short data must still complete its status stage. */
@@ -24,10 +81,15 @@
 +            (token & QTD_TOKEN_NBYTES_MASK));
 +}
 +
- static void ehci_qh_scan_qtds(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
++static bool ehci_qh_scan_qtds(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
  {
      struct ehci_qtd_hw *qtd;
-@@ -689,7 +700,17 @@
+ 
+     (void)bus;
+ 
+-    ehci_qh_remove(qhead, qh);
++    if (!ehci_qh_remove(qhead, qh)) return false;
+ 
      qtd = EHCI_ADDR2QTD(qh->first_qtd);
  
      while (qtd) {
@@ -46,7 +108,11 @@
  
          qtd = EHCI_ADDR2QTD(qtd->hw.next_qtd);
      }
-@@ -716,12 +737,18 @@
++    return true;
+ }
+ 
+ static void ehci_check_qh(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
+@@ -716,12 +763,18 @@
          if (token & QTD_TOKEN_STATUS_ACTIVE) {
              return;
          }
@@ -65,3 +131,71 @@
      urb->data_toggle = (qh->hw.overlay.token & QTD_TOKEN_TOGGLE) != 0;
  
      if ((token & QTD_TOKEN_STATUS_ERRORS) == 0) {
+@@ -738,7 +791,7 @@
+         }
+     }
+ 
+-    ehci_qh_scan_qtds(bus, qhead, qh);
++    if (!ehci_qh_scan_qtds(bus, qhead, qh)) return;
+ 
+     if (USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_INTERRUPT) {
+         ehci_urb_waitup(bus, urb);
+@@ -749,11 +802,11 @@
+     }
+ }
+ 
+-static void ehci_kill_qh(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
++static bool ehci_kill_qh(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
+ {
+     (void)bus;
+ 
+-    ehci_qh_remove(qhead, qh);
++    return ehci_qh_remove(qhead, qh);
+ }
+ 
+ static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
+@@ -1353,7 +1406,6 @@
+         return -USB_ERR_INVAL;
+     }
+ 
+-    EHCI_HCOR->usbcmd &= ~(EHCI_USBCMD_PSEN | EHCI_USBCMD_ASEN);
+ 
+     if ((USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_CONTROL) || (USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_BULK)) {
+ #if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
+@@ -1363,7 +1415,10 @@
+         while ((qh != &g_async_qh_head[bus->hcd.hcd_id]) && qh) {
+             if (qh->urb == urb) {
+                 remove_in_iaad = true;
+-                ehci_kill_qh(bus, &g_async_qh_head[bus->hcd.hcd_id], qh);
++                if (!ehci_kill_qh(bus, &g_async_qh_head[bus->hcd.hcd_id], qh)) {
++                    usb_osal_leave_critical_section(flags);
++                    return -USB_ERR_TIMEOUT;
++                }
+             }
+             qh = EHCI_ADDR2QH(qh->hw.hlp);
+         }
+@@ -1374,20 +1429,21 @@
+         qh = EHCI_ADDR2QH(g_periodic_qh_head[bus->hcd.hcd_id].hw.hlp);
+         while (qh) {
+             if (qh->urb == urb) {
+-                ehci_kill_qh(bus, &g_periodic_qh_head[bus->hcd.hcd_id], qh);
++                if (!ehci_kill_qh(bus, &g_periodic_qh_head[bus->hcd.hcd_id], qh)) {
++                    usb_osal_leave_critical_section(flags);
++                    return -USB_ERR_TIMEOUT;
++                }
+             }
+             qh = EHCI_ADDR2QH(qh->hw.hlp);
+         }
+     } else {
+ #ifdef CONFIG_USB_EHCI_ISO
+         ehci_kill_iso_urb(bus, urb);
+-        EHCI_HCOR->usbcmd |= (EHCI_USBCMD_PSEN | EHCI_USBCMD_ASEN);
+         usb_osal_leave_critical_section(flags);
+         return 0;
+ #endif
+     }
+ 
+-    EHCI_HCOR->usbcmd |= (EHCI_USBCMD_PSEN | EHCI_USBCMD_ASEN);
+ 
+     qh = (struct ehci_qh_hw *)urb->hcpriv;
+     urb->errorcode = -USB_ERR_SHUTDOWN;

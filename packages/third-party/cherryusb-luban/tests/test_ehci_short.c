@@ -21,9 +21,14 @@ void usb_osal_leave_critical_section(size_t f) { (void)f; }
  * remains active. Execute the real unlink helper against this cache model. */
 static struct ehci_qh *cached_predecessor;
 static struct ehci_qh dma_predecessor;
+static struct ehci_hcor regs;
 void usb_dcache_clean(uintptr_t p, size_t n)
 {
     assert(p && n); cache_ops++;
+#ifndef EXPECT_UPSTREAM_BUG
+    if (p == (uintptr_t)cached_predecessor)
+        assert(!(regs.usbcmd & EHCI_USBCMD_ASEN));
+#endif
     if (p == (uintptr_t)cached_predecessor)
         memcpy(&dma_predecessor, (void *)p, n < sizeof(dma_predecessor) ? n : sizeof(dma_predecessor));
 }
@@ -82,12 +87,30 @@ static void test_predecessor_cache_writeback(void)
      * roll this unrelated endpoint's overlay back to that cached image. */
     dma_predecessor.overlay.token = QTD_TOKEN_TOGGLE;
     dma_predecessor.curr_qtd = 0x2000;
+#ifndef EXPECT_UPSTREAM_BUG
+    regs.usbcmd = EHCI_USBCMD_ASEN | EHCI_USBCMD_PSEN;
+    regs.usbsts = EHCI_USBSTS_ASS | EHCI_USBSTS_PSS;
+    assert(!ehci_qh_remove(head, removed));
+    assert(pred->hw.hlp == QH_HLP_QH(removed));
+    assert(regs.usbcmd == (EHCI_USBCMD_ASEN | EHCI_USBCMD_PSEN));
+    regs.usbsts = EHCI_USBSTS_PSS; /* periodic DMA stays running */
+#endif
     ehci_qh_remove(head, removed);
     assert(dma_predecessor.hlp == removed->hw.hlp);
+#ifdef EXPECT_UPSTREAM_BUG
     assert(dma_predecessor.overlay.token == QTD_TOKEN_STATUS_ACTIVE);
     assert(dma_predecessor.curr_qtd == 0x1000);
+#else
+    assert(dma_predecessor.overlay.token == QTD_TOKEN_TOGGLE);
+    assert(dma_predecessor.curr_qtd == 0x2000);
+    assert(regs.usbcmd == (EHCI_USBCMD_ASEN | EHCI_USBCMD_PSEN));
+#endif
     cached_predecessor = NULL;
-    puts("cache hazard reproduced: unlink writes stale predecessor DATA toggle/current qTD back to DMA memory");
+#ifdef EXPECT_UPSTREAM_BUG
+    puts("cache hazard reproduced in upstream predecessor writeback");
+#else
+    puts("quiesced unlink preserves predecessor DMA toggle/current qTD");
+#endif
 }
 static void test_snapshot(void)
 {
