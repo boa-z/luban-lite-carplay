@@ -210,13 +210,57 @@ const struct dfs_mount_tbl mount_table[] = {
 #ifdef LPKG_USING_DFS_UFFS
     {"data", "/data", "uffs", 0, 0, DFS_MOUNT_PRIO_LATE},
 #endif
-#ifdef AIC_USING_SDMC1
-    {"sd1", "/sdcard", "elm", 0, 0, DFS_MOUNT_PRIO_EARLY},
-#endif
 #if (defined(AIC_USING_USB0_HOST) || defined(AIC_USING_USB0_OTG) || defined(AIC_USING_USB1_HOST))
     {"udisk", "/udisk", "elm", 0, 0, 0xFF},
 #endif
     {0}
 };
+
+/*
+ * TF card slot J5: 4-bit SDC1 on PC0-PC5 with card detect on PC6. Mount the
+ * card when the block device appears and unmount it after removal so the
+ * optional card can be inserted or swapped at runtime.
+ */
+#ifdef AIC_USING_SDMC1
+static void sdcard_automount_thread(void *parameter)
+{
+    rt_bool_t mounted = RT_FALSE;
+
+    while (1)
+    {
+        rt_bool_t present = rt_device_find("sd1") != RT_NULL;
+
+        if (present && !mounted) {
+            if (dfs_mount("sd1", "/sdcard", "elm", 0, 0) == 0) {
+                mounted = RT_TRUE;
+                pr_info("TF card mounted at /sdcard\n");
+            } else {
+                /* Unformatted or unsupported card: retry slowly. */
+                rt_thread_mdelay(4000);
+            }
+        } else if (!present && mounted) {
+            if (dfs_unmount("/sdcard") == 0) {
+                mounted = RT_FALSE;
+                pr_info("TF card removed, /sdcard unmounted\n");
+            }
+        }
+
+        rt_thread_mdelay(1000);
+    }
+}
+
+static int sdcard_automount_init(void)
+{
+    rt_thread_t tid;
+
+    tid = rt_thread_create("sd_mount", sdcard_automount_thread, RT_NULL,
+                           4096, 20, 10);
+    if (tid)
+        rt_thread_startup(tid);
+
+    return 0;
+}
+INIT_APP_EXPORT(sdcard_automount_init);
+#endif
 #endif
 

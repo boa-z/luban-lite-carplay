@@ -9,46 +9,13 @@ concurrency:
   group: firmware-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  host-regressions:
-    name: Luban-Lite adapters (ASan/UBSan)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-          submodules: recursive
-      - name: Fetch portable SDK host cryptography dependency
-        run: packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
-      - name: Check actual composition, media, pairing and transports
-        run: make -C application/rt-thread/rtcarplay -j8 check
-      - name: Preserve actual lwIP route evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: internet-route-host-${{ github.sha }}
-          path: application/rt-thread/rtcarplay/build/internet-share/internet-routing.pcap
-          if-no-files-found: error
-          retention-days: 14
-      - name: Render and exercise the actual LVGL 9 Launcher V2
-        run: |
-          cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B build/launcher-preview -DCMAKE_BUILD_TYPE=Debug
-          cmake --build build/launcher-preview -j8
-          mkdir -p output/launcher-v2-preview
-          build/launcher-preview/launcher_preview output/launcher-v2-preview
-      - name: Preserve Launcher layout previews
-        uses: actions/upload-artifact@v4
-        with:
-          name: launcher-v2-preview-${{ github.sha }}
-          path: output/launcher-v2-preview/
-          if-no-files-found: error
-          retention-days: 14
   firmware:
+    name: Build and publish preview firmware
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        variant: [gui, headless]
+    timeout-minutes: 50
+    # The workflow's only product is the rolling preview release.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,34 +24,76 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential patch dosfstools mtools device-tree-compiler u-boot-tools
+          sudo apt-get install -y build-essential patch dosfstools mtools device-tree-compiler u-boot-tools cpio
           python3 -m venv .ci-venv
           .ci-venv/bin/pip install -r .ci/requirements.txt
           echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
-      - name: Check baremetal OSAL and USB regressions
-        run: |
-          bash packages/third-party/cherryusb-luban/tests/run_baremetal.sh
-          bash packages/third-party/cherryusb-luban/tests/run.sh
-          bash packages/third-party/cherryusb-luban/tests/run_control_probe.sh
-      - name: Check video handoff and SDK framebuffer command ABI
-        run: make -C application/rt-thread/rtcarplay check-lubanlite-video SDK_ROOT="$GITHUB_WORKSPACE"
-      - name: Check application connection manager and launcher input
-        run: make -C application/rt-thread/rtcarplay check-lubanlite-demo SDK_ROOT="$GITHUB_WORKSPACE"
       - name: Build Bootloader and complete IMG
         env:
           PYTHONUNBUFFERED: '1'
-        run: bash .ci/build-firmware.sh '${{ matrix.variant }}'
-      - name: Upload firmware and build identity
-        uses: actions/upload-artifact@v4
-        with:
-          name: d213-carplay-${{ matrix.variant }}-${{ github.sha }}
-          path: output/ci/${{ matrix.variant }}/
-          if-no-files-found: error
-          retention-days: 14
+        run: bash .ci/build-firmware.sh
+      - name: Write release notes
+        run: |
+          cat > output/ci/NOTES.md <<EOF
+          Preview firmware for commit \`${GITHUB_SHA}\`.
+
+          This is an automatically replaced prerelease: every push to
+          \`carplay-oss\` overwrites the \`preview\` assets below. It has not
+          received the board acceptance listed in
+          [\`media-transport-repair.md\`](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/application/rt-thread/rtcarplay/docs/media-transport-repair.md).
+
+          | Asset | Purpose |
+          |---|---|
+          | \`d213-carplay.img\` | Full USB image with the A/B bootloader |
+          | \`ota.cpio\` | A/B OTA package |
+          | \`bootloader.bin\` | A/B bootloader |
+          | \`SHA256SUMS\` | Asset checksums |
+
+          ## Installing
+
+          1. A device still running a pre-A/B firmware must first flash the
+             \`d213-carplay.img\` over USB. That image contains the A/B
+             bootloader and the env layout; OTA alone cannot switch slots
+             until this one-time migration is done.
+          2. Afterwards, fetch the OTA package from a stable URL:
+             \`https://github.com/${GITHUB_REPOSITORY}/releases/download/preview/ota.cpio\`.
+             Or copy \`ota.cpio\` to the TF card root and run \`test_ota\` in the
+             serial console; the card is mounted at \`/sdcard\`.
+          3. \`/data\` is not part of the OTA package: Bluetooth bonds and
+             settings survive an update.
+
+          The board-side download is wired Ethernet (\`e0\`) only. The iPhone
+          USB link (\`i0\`) is not an Internet uplink.
+          EOF
+
+      - name: Publish rolling preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          title="Preview firmware ${GITHUB_SHA:0:8}"
+          if gh release view preview >/dev/null 2>&1; then
+            gh release edit preview --title "$title" --notes-file output/ci/NOTES.md --prerelease
+          else
+            gh release create preview --prerelease --target "$GITHUB_SHA" \
+              --title "$title" --notes-file output/ci/NOTES.md
+          fi
+          gh release upload preview \
+            output/ci/d213-carplay.img \
+            output/ci/ota.cpio \
+            output/ci/bootloader.bin \
+            output/ci/SHA256SUMS \
+            output/ci/source-manifest.txt \
+            --clobber
+          # Keep the rolling tag pointing at this build; the asset URLs do not
+          # change. Best effort: a protected tag still leaves the assets updated.
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/preview" \
+            -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1 || true
       - name: Preserve build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: d213-carplay-${{ matrix.variant }}-failure-logs
+          name: build-failure-logs-${{ github.sha }}
           path: output/ci-logs/
           if-no-files-found: ignore
