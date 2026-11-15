@@ -154,7 +154,20 @@
  }
  
  static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
-@@ -1353,7 +1406,6 @@
+@@ -1323,6 +1378,12 @@
+     }
+     return ret;
+ errout_timeout:
++    {
++        extern void usbh_ehci_timeout_snapshot(struct usbh_urb *, int)
++            __attribute__((weak));
++        if (usbh_ehci_timeout_snapshot)
++            usbh_ehci_timeout_snapshot(urb, ret);
++    }
+     urb->timeout = 0;
+     usbh_kill_urb(urb);
+     return ret;
+@@ -1353,7 +1412,6 @@
          return -USB_ERR_INVAL;
      }
  

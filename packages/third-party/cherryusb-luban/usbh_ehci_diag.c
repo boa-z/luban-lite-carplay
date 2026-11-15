@@ -143,5 +143,29 @@ void usbh_ehci_transfer_snapshot(struct usbh_urb *urb, int reason)
                id, urb->ep->bEndpointAddress, reason);
     usb_ehci_status(2, argv);
 }
+/* The synchronous HCD wait invokes this before cancellation, while the
+ * pending OUT QH is still inspectable. Limit automatic serial output to one
+ * snapshot per OUT endpoint/device address on each bus. Manual snapshots
+ * remain unrestricted. No payload is captured and no URB is retained. */
+void usbh_ehci_timeout_snapshot(struct usbh_urb *urb, int reason)
+{
+    static uint16_t seen[CONFIG_USBHOST_MAX_BUS];
+    static uint8_t address[CONFIG_USBHOST_MAX_BUS];
+    if (!urb || !urb->hport || !urb->hport->bus || !urb->ep ||
+        USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) != USB_ENDPOINT_TYPE_BULK ||
+        (urb->ep->bEndpointAddress & 0x80)) return;
+    unsigned id = urb->hport->bus->busid;
+    if (id >= CONFIG_USBHOST_MAX_BUS) return;
+    uint16_t bit = (uint16_t)(1U << (urb->ep->bEndpointAddress & 15U));
+    size_t flags = usb_osal_enter_critical_section();
+    if (address[id] != urb->hport->dev_addr) {
+        address[id] = urb->hport->dev_addr;
+        seen[id] = 0;
+    }
+    bool capture = !(seen[id] & bit);
+    seen[id] |= bit;
+    usb_osal_leave_critical_section(flags);
+    if (capture) usbh_ehci_transfer_snapshot(urb, reason);
+}
 MSH_CMD_EXPORT(usb_ehci_status, Read-only EHCI register and descriptor snapshot);
 #endif
