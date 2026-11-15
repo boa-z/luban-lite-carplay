@@ -33,7 +33,11 @@
 #define LWIP_SOCKET_SELECT      1
 #define LWIP_SOCKET_POLL        1
 #define LWIP_TCPIP_CORE_LOCKING 1
+#ifdef RT_LWIP_QUEUED_INPUT
+#define LWIP_TCPIP_CORE_LOCKING_INPUT 0
+#else
 #define LWIP_TCPIP_CORE_LOCKING_INPUT 1
+#endif
 #define LWIP_RAND rand
 
 #ifndef SSIZE_MAX
