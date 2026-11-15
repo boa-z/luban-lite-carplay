@@ -504,7 +504,9 @@
 
 #define LWIP_UDPLITE                0
 #define UDP_TTL                     255
-#ifdef AIC_WLAN_AIC8800D40L
+#ifdef RT_LWIP_UDP_RECVMBOX_SIZE
+#define DEFAULT_UDP_RECVMBOX_SIZE   RT_LWIP_UDP_RECVMBOX_SIZE
+#elif defined(AIC_WLAN_AIC8800D40L)
 #define DEFAULT_UDP_RECVMBOX_SIZE   32
 #else
 #define DEFAULT_UDP_RECVMBOX_SIZE   1
@@ -674,7 +676,11 @@
  * If LWIP_SO_RCVBUF is used, this is the default value for recv_bufsize.
  */
 #ifndef RECV_BUFSIZE_DEFAULT
+#ifdef RT_LWIP_RECV_BUFSIZE
+#define RECV_BUFSIZE_DEFAULT            RT_LWIP_RECV_BUFSIZE
+#else
 #define RECV_BUFSIZE_DEFAULT            8192
+#endif
 #endif
 
 /**

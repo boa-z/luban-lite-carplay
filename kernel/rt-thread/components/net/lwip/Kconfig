@@ -141,6 +141,20 @@ if RT_USING_LWIP
         int "the number of raw connection"
         default 64
 
+    config RT_LWIP_UDP_RECVMBOX_SIZE
+        int "UDP receive mailbox slots per socket"
+        range 1 256
+        default 32 if AIC_WLAN_AIC8800D40L
+        default 1
+        help
+            Maximum datagrams queued before the socket owner runs. Bursty
+            media needs both enough slots and a sufficient receive byte limit.
+
+    config RT_LWIP_RECV_BUFSIZE
+        int "Default UDP/raw receive byte limit per socket"
+        range 8192 1048576
+        default 8192
+
     config RT_LWIP_UDP_PCB_NUM
         int "the number of UDP socket"
         default 64

@@ -136,7 +136,8 @@
         defined(__ia64__)  || defined(__alpha__)      || \
         ( defined(__sparc__) && defined(__arch64__) ) || \
         defined(__s390x__) || defined(__mips64)       || \
-        defined(__aarch64__) )
+        defined(__aarch64__) ||                         \
+        ( defined(__riscv) && __riscv_xlen == 64 ) )
         #if !defined(MBEDTLS_HAVE_INT64)
             #define MBEDTLS_HAVE_INT64
         #endif /* MBEDTLS_HAVE_INT64 */
