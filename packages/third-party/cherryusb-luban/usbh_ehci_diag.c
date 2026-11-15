@@ -116,6 +116,16 @@ static void usb_ehci_status(int argc, char **argv)
 usage:
     rt_kprintf("usage: usb_ehci_status [bus]\n");
 }
+/* Low-priority startup diagnostics; no URB or hport pointer escapes its owner. */
+void usbh_ehci_network_snapshot(void)
+{
+    extern const char *usbh_ehci_completion_policy(void) __attribute__((weak));
+    if (usbh_ehci_completion_policy)
+        rt_kprintf("[wired-test] EHCI completion=%s\n", usbh_ehci_completion_policy());
+    char command[] = "usb_ehci_status";
+    char *argv[] = {command};
+    usb_ehci_status(1, argv);
+}
 /* Called from a waiting task before cancellation destroys the pending QH.
  * Uses the same bounded read-only collector as the shell command. */
 void usbh_ehci_transfer_snapshot(struct usbh_urb *urb, int reason)

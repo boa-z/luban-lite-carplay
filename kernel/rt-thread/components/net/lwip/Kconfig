@@ -133,6 +133,15 @@ if RT_USING_LWIP
         int "the number of struct netconns"
         default 64
 
+    config RT_LWIP_SYS_TIMEOUT_EXTRA
+        int "Additional application timeout pool entries"
+        range 0 128
+        default 8
+        help
+            lwIP's internal timer formula excludes application timers. Reserve
+            entries for mDNS per-interface probing, NAPT and network monitoring.
+            Increase this value when adding more interfaces or timer owners.
+
     config RT_LWIP_PBUF_NUM
         int "the number of PBUF"
         default 64

@@ -15,6 +15,7 @@ static USB_MEM_ALIGNX uint8_t data[65536];
 static USB_MEM_ALIGNX struct usb_setup_packet setup;
 static unsigned callbacks, cache_ops;
 static int result;
+static struct ehci_qh_hw *pending_at_callback;
 size_t usb_osal_enter_critical_section(void) { return 0; }
 void usb_osal_leave_critical_section(size_t f) { (void)f; }
 /* CPU image and DMA memory deliberately diverge while the predecessor QH
@@ -40,7 +41,18 @@ void usb_dcache_invalidate(uintptr_t p, size_t n)
 }
 int usb_osal_sem_give(usb_osal_sem_t s) { (void)s; assert(!"async test cannot signal sync waiter"); return 0; }
 void usbh_hub_thread_wakeup(struct usbh_hub *h) { (void)h; assert(!"unexpected port-change interrupt"); }
-static void done(void *arg, int n) { assert(arg == &callbacks); callbacks++; result = n; }
+static void done(void *arg, int n)
+{
+    assert(arg == &callbacks);
+    if (pending_at_callback) {
+#ifdef EXPECT_IAA_BEFORE_SCAN
+        assert(!pending_at_callback->remove_in_iaad);
+#else
+        assert(pending_at_callback->remove_in_iaad);
+#endif
+    }
+    callbacks++; result = n;
+}
 static struct usbh_bus bus;
 struct usbh_bus g_usbhost_bus[CONFIG_USBHOST_MAX_BUS];
 static struct usbh_hub hub;
@@ -165,7 +177,9 @@ static void test_old_iaa_with_new_completion(uint32_t completion_status)
     g_usbhost_bus[0] = bus;
     regs.usbintr = completion_status | EHCI_USBSTS_IAA;
     regs.usbsts = regs.usbintr;
+    pending_at_callback = fresh;
     USBH_IRQHandler(0);
+    pending_at_callback = NULL;
     assert(callbacks == 1);
     assert(!old->inuse && !urb.hcpriv);
     assert(fresh->inuse && fresh->remove_in_iaad && newer.hcpriv == fresh);
@@ -179,6 +193,20 @@ static void test_old_iaa_with_new_completion(uint32_t completion_status)
     assert(callbacks == 2);
     puts("old IAA cannot retire a QH unlinked by the same interrupt");
 }
+static void test_iaa_without_old_removal(void)
+{
+    struct ehci_qh_hw *qh = begin(true, 64);
+    EHCI_ADDR2QTD(qh->first_qtd)->hw.token = QTD_TOKEN_PID_IN;
+    memset(&g_periodic_qh_head[0], 0, sizeof(g_periodic_qh_head[0]));
+    g_usbhost_bus[0] = bus;
+    regs.usbintr = regs.usbsts = EHCI_USBSTS_INT | EHCI_USBSTS_IAA;
+    USBH_IRQHandler(0);
+    assert(!callbacks && qh->inuse && qh->remove_in_iaad);
+    regs.usbsts = EHCI_USBSTS_IAA;
+    USBH_IRQHandler(0);
+    assert(callbacks == 1 && !qh->inuse && !urb.hcpriv);
+    puts("empty old IAA cohort cannot retire a newly completed transfer");
+}
 #endif
 int main(void)
 {
@@ -188,6 +216,7 @@ int main(void)
     test_old_iaa_with_new_completion(EHCI_USBSTS_INT);
     test_old_iaa_with_new_completion(EHCI_USBSTS_ERR);
     test_old_iaa_with_new_completion(EHCI_USBSTS_INT | EHCI_USBSTS_ERR);
+    test_iaa_without_old_removal();
 #endif
     /* Reproduce a 4-byte Apple control transfer terminating qTD 1/4. */
     struct ehci_qh_hw *qh = begin(true, sizeof(data)); assert(qh);

@@ -638,8 +638,13 @@
 #define MDNS_MAX_SERVICES               4
 #endif
 
-/* MEMP_NUM_SYS_TIMEOUT: the number of simulateously active timeouts. */
-#define MEMP_NUM_SYS_TIMEOUT       (LWIP_TCP + IP_REASSEMBLY + LWIP_ARP + (2 * LWIP_DHCP) + LWIP_AUTOIP + LWIP_IGMP + LWIP_DNS + PPP_SUPPORT + (LWIP_IPV6 ? (1 + (2 * LWIP_IPV6)) : 0))
+/* The core formula excludes mDNS probe timers (one per registered netif),
+ * NAPT and the application's network monitor. Keep those owners budgeted
+ * separately; otherwise returning to wireless can exhaust the static pool. */
+#ifndef RT_LWIP_SYS_TIMEOUT_EXTRA
+#define RT_LWIP_SYS_TIMEOUT_EXTRA 8
+#endif
+#define MEMP_NUM_SYS_TIMEOUT       (LWIP_NUM_SYS_TIMEOUT_INTERNAL + RT_LWIP_SYS_TIMEOUT_EXTRA)
 
 /*
  * LWIP_COMPAT_SOCKETS==1: Enable BSD-style sockets functions names.
