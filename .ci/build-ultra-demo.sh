@@ -45,6 +45,7 @@ rm -f -- "$images/d21x.elf"
 scons -j"$jobs" 2>&1 | tee "$logs/build.log"
 nm=toolchain/bin/riscv64-unknown-elf-nm
 if [[ ! -f "$nm" && -f "$nm.exe" ]]; then nm="$nm.exe"; fi
+grep -qx 'CONFIG_RTCARPLAY_VEHICLE_PROTOCOL_DEMO=y' .config
 python3 .ci/check-wired-profile.py .config "$images/d21x.elf" "$nm"
 mapfile -t image_files < <(find "$images" -maxdepth 1 -type f -name '*.img')
 if (( ${#image_files[@]} != 1 )); then echo 'Expected one complete IMG' >&2; exit 1; fi
@@ -59,6 +60,7 @@ cp .config "$dest/build.config"
   printf 'sdk_commit=%s\n' "$(git -C packages/third-party/rt-carplay rev-parse HEAD)"
   printf 'L0=PASS_SOURCE_RESEARCH\nL1=PARTIAL_HOST_FOUNDATION\nL2=NOT_RUN\nL3=NOT_RUN\nL4=NOT_RUN\nL5=NOT_RUN\n'
   printf 'official_ultra_acceptance=NOT_RUN\n'
+  printf 'vehicle_protocol_source=SIMULATED_ENGINE_RPM\nvehicle_protocol_enablement=PHONE_OFFER_REQUIRED\nui_sync=DISABLED\n'
   printf 'integration_worktree_begin\n'
   git status --porcelain --untracked-files=all -- . ':!target/d21x/demo128-nand-carplay/pack/bootloader.bin' ':!target/d21x/demo128-nand-carplay/pack/bootloader_upgrade.bin'
   printf 'integration_worktree_end\nsdk_worktree_begin\n'

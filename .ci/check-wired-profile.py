@@ -27,6 +27,16 @@ def check(config, elf, nm):
         raise ValueError('Invalid wired ELF: missing={}, competing={}'.format(
             sorted(required - symbols), sorted(forbidden & symbols)))
     print('PASS: exclusive native NCM, n0 identity, short-IN fix; diagnostic tracing disabled')
+    demo_enabled = 'CONFIG_RTCARPLAY_VEHICLE_PROTOCOL_DEMO=y' in values
+    demo_symbol = 'carplay_vehicle_protocol_demo_create'
+    if demo_enabled:
+        required = {demo_symbol, 'carplay_vehicle_protocol_demo_tick',
+                    'rtcp_vehicle_handle', 'rtcp_vehicle_notification'}
+        if required - symbols:
+            raise ValueError('Vehicle State bench missing from ELF: {}'.format(sorted(required - symbols)))
+        print('PASS: SIMULATED engine Vehicle State bench compiled and linked')
+    elif demo_symbol in symbols:
+        raise ValueError('Classic artifact unexpectedly contains the Vehicle State bench')
 
 
 if __name__ == '__main__':
