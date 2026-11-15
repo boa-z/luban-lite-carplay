@@ -16,6 +16,7 @@ test -s "$pack/.image_cfg.json.tmp"
 cmp "$pack/bootloader.bin" output/d21x_demo128-nand-carplay_baremetal_bootloader/images/d21x.bin
 scons --apply-def="$config" 2>&1 | tee output/ci-logs/firmware-config.log
 scons -j"$jobs" 2>&1 | tee output/ci-logs/firmware-build.log
+python3 .ci/check-wired-profile.py .config "output/${config%_defconfig}/images/d21x.elf" toolchain/bin/riscv64-unknown-elf-nm
 dest=output/ci
 mkdir -p "$dest"
 mapfile -t images < <(find "output/${config%_defconfig}/images" -maxdepth 1 -type f -name '*.img')

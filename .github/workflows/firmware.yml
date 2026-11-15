@@ -28,9 +28,10 @@ jobs:
           python3 -m venv .ci-venv
           .ci-venv/bin/pip install -r .ci/requirements.txt
           echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
-      - name: Test OTA worker and actual LVGL launcher
+      - name: Test OTA, wired integration and actual LVGL launcher
         run: |
           make -C application/rt-thread/rtcarplay check-ota
+          make -C application/rt-thread/rtcarplay check-native-ncm check-lubanlite-usb check-wired-identity check-wired-trace check-iap2-endpoints check-usb-iap2-worker
           cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B output/launcher-preview -DCMAKE_BUILD_TYPE=Debug
           cmake --build output/launcher-preview -j8
           mkdir -p output/launcher-screens
@@ -77,7 +78,7 @@ jobs:
              settings survive an update.
 
           The board-side download is wired Ethernet (\`e0\`) only. The iPhone
-          USB link (\`i0\`) is not an Internet uplink.
+          USB link (\`n0\`) is not an Internet uplink.
           EOF
 
       - name: Publish rolling preview release
