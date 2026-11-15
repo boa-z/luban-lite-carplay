@@ -5,7 +5,9 @@
  * equivalent unsigned mask here so UBSan can check the descriptor paths. */
 #undef QTD_TOKEN_TOGGLE
 #define QTD_TOKEN_TOGGLE (UINT32_C(1) << 31)
+#define usbh_ehci_timeout_snapshot test_timeout_probe
 #include CHERRYUSB_EHCI_SOURCE
+#undef usbh_ehci_timeout_snapshot
 #include <assert.h>
 #include <stdio.h>
 #define RT_USING_FINSH
@@ -16,8 +18,18 @@ static USB_MEM_ALIGNX struct usb_setup_packet setup;
 static unsigned callbacks, cache_ops;
 static int result;
 static struct ehci_qh_hw *pending_at_callback;
+static bool timeout_test;
+static unsigned timeout_probes, timeout_waits;
+static void acknowledge_test_kill(void);
 size_t usb_osal_enter_critical_section(void) { return 0; }
-void usb_osal_leave_critical_section(size_t f) { (void)f; }
+void usb_osal_leave_critical_section(size_t f)
+{ (void)f; if (timeout_test) acknowledge_test_kill(); }
+int usb_osal_sem_take(usb_osal_sem_t s, uint32_t ms)
+{
+    (void)s; assert(timeout_test && ms == 1000);
+    ++timeout_waits;
+    return -USB_ERR_TIMEOUT;
+}
 /* CPU image and DMA memory deliberately diverge while the predecessor QH
  * remains active. Execute the real unlink helper against this cache model. */
 static struct ehci_qh *cached_predecessor;
@@ -59,6 +71,25 @@ static struct usbh_hub hub;
 static struct usbh_hubport port;
 static struct usb_endpoint_descriptor ep;
 static struct usbh_urb urb;
+static void acknowledge_test_kill(void)
+{
+    for (unsigned i = 0; i < CONFIG_USB_EHCI_QH_NUM; ++i) {
+        if (ehci_qh_pool[0][i].killed != 1) continue;
+        regs.usbintr = regs.usbsts = EHCI_USBSTS_IAA;
+        USBH_IRQHandler(0);
+        return;
+    }
+}
+void test_timeout_probe(struct usbh_urb *u, int reason)
+{
+    assert(timeout_test && reason == -USB_ERR_TIMEOUT);
+    struct ehci_qh_hw *qh = u->hcpriv;
+    assert(qh && qh->inuse && qh->urb == u && !qh->killed);
+    assert(u->errorcode == -USB_ERR_BUSY && !u->actual_length);
+    assert(EHCI_ADDR2QTD(qh->first_qtd)->hw.token & QTD_TOKEN_STATUS_ACTIVE);
+    ++timeout_probes;
+    usbh_ehci_timeout_snapshot(u, reason);
+}
 static struct ehci_qh_hw *begin(bool input, unsigned length)
 {
     memset(&bus, 0, sizeof(bus)); memset(&urb, 0, sizeof(urb));
@@ -78,6 +109,27 @@ static struct ehci_qh_hw *begin(bool input, unsigned length)
 }
 static struct ehci_qtd_hw *next(struct ehci_qtd_hw *q)
 { return EHCI_ADDR2QTD(q->hw.next_qtd); }
+#ifndef EXPECT_UPSTREAM_BUG
+static void test_pending_out_timeout(void)
+{
+    struct ehci_qh_hw *qh = begin(false, 70);
+    assert(ehci_qh_remove(&g_async_qh_head[0], qh));
+    ehci_qh_free(&bus, qh);
+    hub.is_roothub = true; port.connected = true; port.port = 1;
+    port.dev_addr = 7;
+    regs.portsc[0] = EHCI_PORTSC_CCS;
+    g_usbhost_bus[0] = bus;
+    urb.timeout = 1000;
+    urb.complete = NULL;
+    timeout_probes = timeout_waits = 0;
+    timeout_test = true;
+    assert(usbh_submit_urb(&urb) == -USB_ERR_TIMEOUT);
+    timeout_test = false;
+    assert(timeout_probes == 1 && timeout_waits == 1);
+    assert(!urb.hcpriv && !urb.actual_length && !callbacks);
+    puts("synchronous OUT timeout captures live QH before cancellation and preserves timeout result");
+}
+#endif
 static void complete(struct ehci_qh_hw *qh)
 {
     ehci_check_qh(&bus, &g_async_qh_head[0], qh);
@@ -217,6 +269,7 @@ int main(void)
     test_old_iaa_with_new_completion(EHCI_USBSTS_ERR);
     test_old_iaa_with_new_completion(EHCI_USBSTS_INT | EHCI_USBSTS_ERR);
     test_iaa_without_old_removal();
+    test_pending_out_timeout();
 #endif
     /* Reproduce a 4-byte Apple control transfer terminating qTD 1/4. */
     struct ehci_qh_hw *qh = begin(true, sizeof(data)); assert(qh);
