@@ -65,12 +65,59 @@
              token |= QTD_TOKEN_IOC;
          }
  
-@@ -678,21 +703,43 @@
+@@ -503,6 +528,25 @@
+         if (buflen == 0) {
+             break;
+         }
++    }
++
++    /* An alternate T bit does NOT stop a short transfer: the controller
++     * follows the normal next qTD instead. Multi-qTD bulk IN must branch to
++     * an inactive halted stop qTD, or later NTBs are consumed into the tail
++     * that software deliberately excludes after the first short packet.
++     * Append the software-owned stop to the normal chain for flush/free;
++     * scanners recognize its NULL URB and never report it as a data STALL. */
++    if ((urb->ep->bEndpointAddress & 0x80) && first_qtd != prev_qtd) {
++        struct ehci_qtd_hw *stop = ehci_qtd_alloc(bus);
++        if (!stop) {
++            qh->first_qtd = EHCI_PTR2ADDR(first_qtd);
++            ehci_qh_free(bus, qh); /* unpublished chain, no DMA ownership */
++            urb->errorcode = -USB_ERR_NOMEM;
++            return NULL;
++        }
++        prev_qtd->hw.next_qtd = EHCI_PTR2ADDR(stop);
++        for (qtd = first_qtd; qtd != stop; qtd = EHCI_ADDR2QTD(qtd->hw.next_qtd))
++            qtd->hw.alt_next_qtd = EHCI_PTR2ADDR(stop);
+     }
+ 
+     /* update qh first qtd */
+@@ -663,6 +707,20 @@
+     }
+ #endif
+ 
++    /* Async QH reclamation reaches here only after its IAA cohort. Read the
++     * hardware-owned PID at this final handoff, not at the earlier unlink.
++     * Preserve error-specific resets already selected by ehci_check_qh. */
++    if (urb->errorcode == 0) {
++#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
++        usb_dcache_invalidate((uintptr_t)&qh->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
++#endif
++        extern void usbh_ehci_rx_deliver_probe(struct usbh_urb *, uint32_t)
++            __attribute__((weak));
++        if (usbh_ehci_rx_deliver_probe)
++            usbh_ehci_rx_deliver_probe(urb, qh->hw.overlay.token);
++        urb->data_toggle = (qh->hw.overlay.token & QTD_TOKEN_TOGGLE) != 0;
++    }
++
+     if (urb->timeout) {
+         usb_osal_sem_give(qh->waitsem);
+     } else {
+@@ -678,21 +736,44 @@
      }
  }
  
 -static void ehci_qh_scan_qtds(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
-+/* A short bulk IN follows alt_next_qtd (terminate), leaving later qTDs
++/* A short bulk IN follows alt_next_qtd (halted stop), leaving later qTDs
 + * active. Errors also halt execution before the rest of the software chain.
 + * Control IN short data must still complete its status stage. */
 +static bool ehci_qtd_ends_urb(const struct usbh_urb *urb, uint32_t token)
@@ -94,6 +141,7 @@
  
      while (qtd) {
 -        qtd->urb->actual_length += (qtd->length - ((qtd->hw.token & QTD_TOKEN_NBYTES_MASK) >> QTD_TOKEN_NBYTES_SHIFT));
++        if (qtd->urb == NULL) break; /* software-owned halted stop qTD */
 +#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
 +        usb_dcache_invalidate((uintptr_t)&qtd->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
 +#endif
@@ -112,7 +160,15 @@
  }
  
  static void ehci_check_qh(struct usbh_bus *bus, struct ehci_qh_hw *qhead, struct ehci_qh_hw *qh)
-@@ -716,12 +763,18 @@
+@@ -708,6 +789,7 @@
+     }
+ 
+     while (qtd) {
++        if (qtd->urb == NULL) break; /* software-owned halted stop qTD */
+ #if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
+         usb_dcache_invalidate((uintptr_t)&qtd->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
+ #endif
+@@ -716,13 +798,29 @@
          if (token & QTD_TOKEN_STATUS_ACTIVE) {
              return;
          }
@@ -125,22 +181,34 @@
  
      urb = qh->urb;
  
+-    urb->data_toggle = (qh->hw.overlay.token & QTD_TOKEN_TOGGLE) != 0;
++    /* Unlink/quiesce before inspecting the overlay. This is diagnostic
++     * evidence only; the final DATA PID is copied at IAA completion. */
++    if (!ehci_qh_scan_qtds(bus, qhead, qh)) return;
++
 +#if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
 +    usb_dcache_invalidate((uintptr_t)&qh->hw, CONFIG_USB_EHCI_ALIGN_SIZE);
 +#endif
-     urb->data_toggle = (qh->hw.overlay.token & QTD_TOKEN_TOGGLE) != 0;
++    {
++        extern void usbh_ehci_rx_complete_probe(struct usbh_urb *, uint32_t)
++            __attribute__((weak));
++        if (usbh_ehci_rx_complete_probe && !(token & QTD_TOKEN_STATUS_ERRORS))
++            usbh_ehci_rx_complete_probe(urb, qh->hw.overlay.token);
++    }
++    /* Keep the starting PID until final IAA completion owns the overlay. */
  
      if ((token & QTD_TOKEN_STATUS_ERRORS) == 0) {
-@@ -738,7 +791,7 @@
+         urb->errorcode = 0;
+@@ -738,8 +836,6 @@
          }
      }
  
 -    ehci_qh_scan_qtds(bus, qhead, qh);
-+    if (!ehci_qh_scan_qtds(bus, qhead, qh)) return;
- 
+-
      if (USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_INTERRUPT) {
          ehci_urb_waitup(bus, urb);
-@@ -749,11 +802,11 @@
+     } else {
+@@ -749,11 +845,11 @@
      }
  }
  
@@ -154,7 +222,7 @@
  }
  
  static int usbh_reset_port(struct usbh_bus *bus, const uint8_t port)
-@@ -1323,6 +1378,12 @@
+@@ -1323,6 +1419,12 @@
      }
      return ret;
  errout_timeout:
@@ -167,7 +235,7 @@
      urb->timeout = 0;
      usbh_kill_urb(urb);
      return ret;
-@@ -1353,7 +1412,6 @@
+@@ -1353,7 +1455,6 @@
          return -USB_ERR_INVAL;
      }
  
@@ -175,7 +243,7 @@
  
      if ((USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_CONTROL) || (USB_GET_ENDPOINT_TYPE(urb->ep->bmAttributes) == USB_ENDPOINT_TYPE_BULK)) {
  #if defined(CONFIG_USB_EHCI_DESC_DCACHE_ENABLE)
-@@ -1363,7 +1415,10 @@
+@@ -1363,7 +1464,10 @@
          while ((qh != &g_async_qh_head[bus->hcd.hcd_id]) && qh) {
              if (qh->urb == urb) {
                  remove_in_iaad = true;
@@ -187,7 +255,7 @@
              }
              qh = EHCI_ADDR2QH(qh->hw.hlp);
          }
-@@ -1374,20 +1429,21 @@
+@@ -1374,20 +1478,21 @@
          qh = EHCI_ADDR2QH(g_periodic_qh_head[bus->hcd.hcd_id].hw.hlp);
          while (qh) {
              if (qh->urb == urb) {
@@ -212,7 +280,7 @@
  
      qh = (struct ehci_qh_hw *)urb->hcpriv;
      urb->errorcode = -USB_ERR_SHUTDOWN;
-@@ -1457,6 +1513,11 @@
+@@ -1457,6 +1562,11 @@
      }
  }
  
@@ -224,7 +292,7 @@
  void USBH_IRQHandler(uint8_t busid)
  {
      uint32_t usbsts;
-@@ -1466,6 +1527,16 @@
+@@ -1466,6 +1576,16 @@
  
      usbsts = EHCI_HCOR->usbsts & EHCI_HCOR->usbintr;
      EHCI_HCOR->usbsts = usbsts;
@@ -241,7 +309,7 @@
  
      if (usbsts & EHCI_USBSTS_INT) {
          ehci_scan_async_list(bus);
-@@ -1505,7 +1576,7 @@
+@@ -1505,7 +1625,7 @@
      if (usbsts & EHCI_USBSTS_IAA) {
          for (uint8_t index = 0; index < CONFIG_USB_EHCI_QH_NUM; index++) {
              struct ehci_qh_hw *qh = &ehci_qh_pool[bus->hcd.hcd_id][index];
