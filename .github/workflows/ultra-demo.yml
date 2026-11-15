@@ -30,6 +30,14 @@ jobs:
           bash packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
           make -C packages/third-party/rt-carplay -j8 check 2>&1 | tee output/ultra-host/sdk.log
           make -C application/rt-thread/rtcarplay -j8 check 2>&1 | tee output/ultra-host/integration.log
+      - name: Render actual Classic and fusion LVGL dashboards
+        run: |
+          set -euo pipefail
+          cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B output/ultra-preview -DCMAKE_BUILD_TYPE=Debug
+          cmake --build output/ultra-preview -j8
+          mkdir -p output/ultra-host/screens
+          output/ultra-preview/launcher_preview output/ultra-host/screens
+          output/ultra-preview/fusion_preview output/ultra-host/screens
       - uses: actions/upload-artifact@v4
         if: always()
         with:
