@@ -199,3 +199,38 @@
  
      qh = (struct ehci_qh_hw *)urb->hcpriv;
      urb->errorcode = -USB_ERR_SHUTDOWN;
+@@ -1467,6 +1523,18 @@
+     usbsts = EHCI_HCOR->usbsts & EHCI_HCOR->usbintr;
+     EHCI_HCOR->usbsts = usbsts;
+ 
++    /* Retire the previous async-advance epoch before scanning completions.
++     * INT/ERR may unlink more QHs and ring a new doorbell. An IAA sampled
++     * at IRQ entry cannot authorize reclamation of those new removals. */
++    if (usbsts & EHCI_USBSTS_IAA) {
++        for (uint8_t index = 0; index < CONFIG_USB_EHCI_QH_NUM; index++) {
++            struct ehci_qh_hw *qh = &ehci_qh_pool[bus->hcd.hcd_id][index];
++            if (qh->remove_in_iaad) {
++                ehci_urb_waitup(bus, qh->urb);
++            }
++        }
++    }
++
+     if (usbsts & EHCI_USBSTS_INT) {
+         ehci_scan_async_list(bus);
+         ehci_scan_periodic_list(bus);
+@@ -1498,15 +1566,6 @@
+                 }
+                 bus->hcd.roothub.int_buffer[0] |= (1 << (port + 1));
+                 usbh_hub_thread_wakeup(&bus->hcd.roothub);
+-            }
+-        }
+-    }
+-
+-    if (usbsts & EHCI_USBSTS_IAA) {
+-        for (uint8_t index = 0; index < CONFIG_USB_EHCI_QH_NUM; index++) {
+-            struct ehci_qh_hw *qh = &ehci_qh_pool[bus->hcd.hcd_id][index];
+-            if (qh->remove_in_iaad) {
+-                ehci_urb_waitup(bus, qh->urb);
+             }
+         }
+     }
