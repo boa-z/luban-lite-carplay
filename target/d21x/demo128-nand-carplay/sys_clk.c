@@ -10,6 +10,18 @@
 #include <aic_hal.h>
 #include "board.h"
 
+/* RTL8201F has no local crystal: PE10 supplies its 25 MHz reference.
+ * The PHY then supplies the 50 MHz RMII clock to GMAC0 on PE3.
+ */
+#ifdef AIC_USING_GMAC0
+#if !defined(AIC_USING_CLK_OUT2) || AIC_CLK_OUT2_FREQ != 25000000
+#error "CarPlay board GMAC0 requires CLK_OUT2 at 25 MHz for RTL8201F"
+#endif
+#if defined(AIC_USING_I2S0) || defined(AIC_USING_DVP)
+#error "CarPlay board GMAC0/PHY clock pins conflict with I2S0 or DVP"
+#endif
+#endif
+
 #ifndef AIC_CLK_PLL_INT0_FREQ
 #define AIC_CLK_PLL_INT0_FREQ 600000000
 #endif

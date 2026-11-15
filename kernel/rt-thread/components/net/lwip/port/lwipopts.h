@@ -454,7 +454,14 @@
 /* Define IP_FORWARD to 1 if you wish to have the ability to forward
    IP packets across network interfaces. If you are going to run lwIP
    on a device with only one network interface, define this to 0. */
-#define IP_FORWARD                  0
+#ifdef RTCARPLAY_INTERNET_SHARE
+#define IP_FORWARD 1
+#define IP_NAPT 1
+#define IP_NAPT_PORTMAP 0
+#define IP_NAPT_MAX 128
+#else
+#define IP_FORWARD 0
+#endif
 
 /* IP reassembly and segmentation.These are orthogonal even
  * if they both deal with IP fragments */
