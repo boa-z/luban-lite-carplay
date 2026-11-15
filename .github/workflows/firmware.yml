@@ -30,6 +30,7 @@ jobs:
           echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
       - name: Test OTA, wired integration and actual LVGL launcher
         run: |
+          bash packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
           make -C application/rt-thread/rtcarplay check-ota
           make -C application/rt-thread/rtcarplay check-native-ncm check-lubanlite-usb check-wired-identity check-wired-trace check-iap2-endpoints check-usb-iap2-worker
           cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B output/launcher-preview -DCMAKE_BUILD_TYPE=Debug
