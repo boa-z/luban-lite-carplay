@@ -39,6 +39,7 @@ void usb_dcache_invalidate(uintptr_t p, size_t n)
         memcpy((void *)p, &dma_predecessor, n < sizeof(dma_predecessor) ? n : sizeof(dma_predecessor));
 }
 int usb_osal_sem_give(usb_osal_sem_t s) { (void)s; assert(!"async test cannot signal sync waiter"); return 0; }
+void usbh_hub_thread_wakeup(struct usbh_hub *h) { (void)h; assert(!"unexpected port-change interrupt"); }
 static void done(void *arg, int n) { assert(arg == &callbacks); callbacks++; result = n; }
 static struct usbh_bus bus;
 struct usbh_bus g_usbhost_bus[CONFIG_USBHOST_MAX_BUS];
@@ -142,10 +143,52 @@ static void test_snapshot(void)
     bus.hcd.hcd_id = CONFIG_USBHOST_MAX_BUS; assert(!snapshot_bus(&bus, &s));
     puts("EHCI snapshot: read-only, bounded and rejects invalid descriptor pointers");
 }
+#ifndef EXPECT_UPSTREAM_BUG
+static void test_old_iaa_with_new_completion(uint32_t completion_status)
+{
+    struct ehci_qh_hw *old = begin(true, 64);
+    struct ehci_qtd_hw *q = EHCI_ADDR2QTD(old->first_qtd);
+    q->hw.token = QTD_TOKEN_PID_IN;
+    ehci_check_qh(&bus, &g_async_qh_head[0], old);
+    assert(old->remove_in_iaad && !callbacks);
+
+    /* The previous doorbell has completed when a different endpoint's
+     * transfer finishes. Both interrupt bits are delivered together. */
+    struct usbh_urb newer = urb;
+    newer.hcpriv = NULL;
+    newer.actual_length = 0;
+    struct ehci_qh_hw *fresh = ehci_bulk_urb_init(&bus, &newer, data, 64);
+    assert(fresh && fresh != old);
+    q = EHCI_ADDR2QTD(fresh->first_qtd);
+    q->hw.token = QTD_TOKEN_PID_IN;
+    memset(&g_periodic_qh_head[0], 0, sizeof(g_periodic_qh_head[0]));
+    g_usbhost_bus[0] = bus;
+    regs.usbintr = completion_status | EHCI_USBSTS_IAA;
+    regs.usbsts = regs.usbintr;
+    USBH_IRQHandler(0);
+    assert(callbacks == 1);
+    assert(!old->inuse && !urb.hcpriv);
+    assert(fresh->inuse && fresh->remove_in_iaad && newer.hcpriv == fresh);
+
+    /* Only a subsequent advance acknowledgement can retire this QH. */
+    regs.usbsts = EHCI_USBSTS_IAA;
+    USBH_IRQHandler(0);
+    assert(callbacks == 2 && !newer.hcpriv && !fresh->inuse);
+    regs.usbsts = EHCI_USBSTS_IAA;
+    USBH_IRQHandler(0);
+    assert(callbacks == 2);
+    puts("old IAA cannot retire a QH unlinked by the same interrupt");
+}
+#endif
 int main(void)
 {
     test_predecessor_cache_writeback();
     test_snapshot();
+#ifndef EXPECT_UPSTREAM_BUG
+    test_old_iaa_with_new_completion(EHCI_USBSTS_INT);
+    test_old_iaa_with_new_completion(EHCI_USBSTS_ERR);
+    test_old_iaa_with_new_completion(EHCI_USBSTS_INT | EHCI_USBSTS_ERR);
+#endif
     /* Reproduce a 4-byte Apple control transfer terminating qTD 1/4. */
     struct ehci_qh_hw *qh = begin(true, sizeof(data)); assert(qh);
     struct ehci_qtd_hw *q = EHCI_ADDR2QTD(qh->first_qtd);
