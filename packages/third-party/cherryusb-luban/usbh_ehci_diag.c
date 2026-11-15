@@ -121,7 +121,7 @@ void usbh_ehci_network_snapshot(void)
 {
     extern const char *usbh_ehci_completion_policy(void) __attribute__((weak));
     if (usbh_ehci_completion_policy)
-        rt_kprintf("[wired-test] EHCI completion=%s\n", usbh_ehci_completion_policy());
+        rt_kprintf("[usb-ehci] completion=%s\n", usbh_ehci_completion_policy());
     char command[] = "usb_ehci_status";
     char *argv[] = {command};
     usb_ehci_status(1, argv);
