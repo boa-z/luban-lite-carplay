@@ -277,6 +277,7 @@ if GetDepend(['LPKG_CHERRYUSB_HOST']) and GetDepend(['AIC_USB_HOST_EHCI_DRV']):
             src += Glob(os.path.join(cwd, 'usb_glue_aic.c'))
             if PRJ_KERNEL == 'rt-thread':
                 src += Glob(os.path.join(cwd, 'usbh_ehci_diag.c'))
+                src += Glob(os.path.join(cwd, 'usbh_ehci_rxtrace.c'))
         if GetDepend(['LPKG_CHERRYUSB_HOST_EHCI_HPM']):
             src += usb_glob('port/ehci/usb_glue_hpm.c')
 
