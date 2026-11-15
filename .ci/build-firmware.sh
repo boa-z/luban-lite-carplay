@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 cd "$(dirname "$0")/.."
+export RTCARPLAY_BUILD_COMMIT="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+python3 .ci/test-ota-manifest.py
 config=d21x_demo128-nand_rt-thread_rtcarplay_defconfig
 jobs=${JOBS:-8}
 pack=target/d21x/demo128-nand-carplay/pack
@@ -25,21 +27,13 @@ python3 .ci/verify-image.py "${images[0]}"
 # The release also publishes the A/B OTA package built beside the IMG.
 ota="output/${config%_defconfig}/images/ota.cpio"
 test -s "$ota"
-# Windows hosts do not have cpio on PATH; the SDK ships the same tool.
-cpio_bin=$(command -v cpio || true)
-if [[ -z "$cpio_bin" ]]; then
-  cpio_bin="$PWD/tools/scripts/cpio.exe"
-  test -x "$cpio_bin" || { echo 'cpio is required to verify the OTA package' >&2; exit 1; }
-fi
-"$cpio_bin" -it < "$ota" | tr -d '\r' > /tmp/ota-list.txt
-for member in ota_info.bin d21x_os.itb rodata.fatfs; do
-  grep -qx "$member" /tmp/ota-list.txt
-done
-test "$(stat -c %s "$ota")" -lt $((8 * 1024 * 1024))
 
 cp "${images[0]}" "$dest/d213-carplay.img"
 cp "$ota" "$dest/ota.cpio"
 cp "$pack/bootloader.bin" "$dest/bootloader.bin"
+# Version/commit manifest read by the device Settings page (single source:
+# image_cfg.json plus the commit being built).
+python3 .ci/ota-manifest.py "$pack/image_cfg.json" "$(git rev-parse HEAD)" "$ota" > "$dest/version.txt"
 {
   printf 'sdk_commit=%s\n' "$(git rev-parse HEAD)"
   printf 'source_worktree_changes_begin\n'
@@ -50,4 +44,4 @@ cp "$pack/bootloader.bin" "$dest/bootloader.bin"
   toolchain/bin/riscv64-unknown-elf-gcc --version | head -1
   printf 'hardware_validation=NOT_RUN\n'
 } > "$dest/source-manifest.txt"
-(cd "$dest" && sha256sum *.img *.cpio bootloader.bin source-manifest.txt > SHA256SUMS)
+(cd "$dest" && sha256sum *.img *.cpio bootloader.bin version.txt source-manifest.txt > SHA256SUMS)

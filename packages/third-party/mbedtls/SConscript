@@ -79,7 +79,7 @@ if GetDepend(['LPKG_USING_MBEDTLS_USE_ALL_CERTS']):
     if len(file_list):
         for i in range(0, len(file_list)):
             path = os.path.join(certs_default_dir, file_list[i])
-            if os.path.isfile(path):
+            if os.path.isfile(path) and file_list[i].lower().endswith(('.cer', '.pem', '.crt')):
                 ROOT_CA_FILE += [path]
 
 if GetDepend(['LPKG_USING_MBEDTLS_USER_CERTS']):
@@ -87,7 +87,7 @@ if GetDepend(['LPKG_USING_MBEDTLS_USER_CERTS']):
     if len(file_list):
         for i in range(0, len(file_list)):
             path = os.path.join(certs_user_dir, file_list[i])
-            if os.path.isfile(path):
+            if os.path.isfile(path) and file_list[i].lower().endswith(('.cer', '.pem', '.crt')):
                 ROOT_CA_FILE += [path]
 
 
@@ -110,7 +110,7 @@ for key, value in KCONFIG_ROOT_CA_DICT.items():
         if os.path.exists(path) and os.path.isfile(path):
             ROOT_CA_FILE += [path]
 
-ROOT_CA_FILE = list(set(ROOT_CA_FILE))
+ROOT_CA_FILE = sorted(set(ROOT_CA_FILE))
 
 file_content = ""
 
