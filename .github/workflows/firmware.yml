@@ -24,10 +24,17 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential patch dosfstools mtools device-tree-compiler u-boot-tools cpio
+          sudo apt-get install -y build-essential cmake patch dosfstools mtools device-tree-compiler u-boot-tools cpio
           python3 -m venv .ci-venv
           .ci-venv/bin/pip install -r .ci/requirements.txt
           echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
+      - name: Test OTA worker and actual LVGL launcher
+        run: |
+          make -C application/rt-thread/rtcarplay check-ota
+          cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B output/launcher-preview -DCMAKE_BUILD_TYPE=Debug
+          cmake --build output/launcher-preview -j8
+          mkdir -p output/launcher-screens
+          output/launcher-preview/launcher_preview output/launcher-screens
       - name: Build Bootloader and complete IMG
         env:
           PYTHONUNBUFFERED: '1'
@@ -47,6 +54,7 @@ jobs:
           | \`d213-carplay.img\` | Full USB image with the A/B bootloader |
           | \`ota.cpio\` | A/B OTA package |
           | \`bootloader.bin\` | A/B bootloader |
+          | \`version.txt\` | Board, version, commit, package size and SHA256 for the update check |
           | \`SHA256SUMS\` | Asset checksums |
 
           ## Installing
@@ -55,11 +63,17 @@ jobs:
              \`d213-carplay.img\` over USB. That image contains the A/B
              bootloader and the env layout; OTA alone cannot switch slots
              until this one-time migration is done.
-          2. Afterwards, fetch the OTA package from a stable URL:
-             \`https://github.com/${GITHUB_REPOSITORY}/releases/download/preview/ota.cpio\`.
-             Or copy \`ota.cpio\` to the TF card root and run \`test_ota\` in the
-             serial console; the card is mounted at \`/sdcard\`.
-          3. \`/data\` is not part of the OTA package: Bluetooth bonds and
+          2. Afterwards, use Settings → FIRMWARE & UPDATES, or run
+             \`carplay_ota check\`, inspect \`carplay_ota status\`, then
+             explicitly run \`carplay_ota install\` in the console.
+          3. On the device, Settings → FIRMWARE & UPDATES runs the nightly
+             channel: it compares the commit compiled into the running image
+             with \`commit=\` in \`version.txt\` and reports any difference as an
+             update. Nothing is installed until the on-screen confirmation;
+             the install stages the package in \`/data\`, verifies its size
+             and SHA256, writes the inactive slot and reboots. Disconnect
+             CarPlay before installing and keep power connected.
+          4. \`/data\` is not part of the OTA package: Bluetooth bonds and
              settings survive an update.
 
           The board-side download is wired Ethernet (\`e0\`) only. The iPhone
@@ -86,6 +100,8 @@ jobs:
             output/ci/SHA256SUMS \
             output/ci/source-manifest.txt \
             --clobber
+          # Publish the authorization manifest after the corresponding assets.
+          gh release upload preview output/ci/version.txt --clobber
           # Keep the rolling tag pointing at this build; the asset URLs do not
           # change. Best effort: a protected tag still leaves the assets updated.
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/preview" \
