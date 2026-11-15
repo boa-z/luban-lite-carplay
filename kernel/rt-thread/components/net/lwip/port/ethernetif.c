@@ -133,13 +133,25 @@ static char eth_rx_thread_stack[RT_LWIP_ETHTHREAD_STACKSIZE];
 
 static int lwip_netdev_set_up(struct netdev *netif)
 {
+#ifdef RTCARPLAY_INTERNET_SHARE
+    LOCK_TCPIP_CORE();
+#endif
     netif_set_up((struct netif *)netif->user_data);
+#ifdef RTCARPLAY_INTERNET_SHARE
+    UNLOCK_TCPIP_CORE();
+#endif
     return ERR_OK;
 }
 
 static int lwip_netdev_set_down(struct netdev *netif)
 {
+#ifdef RTCARPLAY_INTERNET_SHARE
+    LOCK_TCPIP_CORE();
+#endif
     netif_set_down((struct netif *)netif->user_data);
+#ifdef RTCARPLAY_INTERNET_SHARE
+    UNLOCK_TCPIP_CORE();
+#endif
     return ERR_OK;
 }
 
@@ -148,6 +160,9 @@ static int lwip_netdev_set_down(struct netdev *netif)
 #endif
 static int lwip_netdev_set_addr_info(struct netdev *netif, ip_addr_t *ip_addr, ip_addr_t *netmask, ip_addr_t *gw)
 {
+#ifdef RTCARPLAY_INTERNET_SHARE
+    LOCK_TCPIP_CORE();
+#endif
     if (ip_addr && netmask && gw)
     {
         netif_set_addr((struct netif *)netif->user_data, ip_2_ip4(ip_addr), ip_2_ip4(netmask), ip_2_ip4(gw));
@@ -170,12 +185,18 @@ static int lwip_netdev_set_addr_info(struct netdev *netif, ip_addr_t *ip_addr, i
         }
     }
 
+#ifdef RTCARPLAY_INTERNET_SHARE
+    UNLOCK_TCPIP_CORE();
+#endif
     return ERR_OK;
 }
 
 #ifdef RT_LWIP_DNS
 static int lwip_netdev_set_dns_server(struct netdev *netdev, uint8_t dns_num, ip_addr_t *dns_server)
 {
+#ifdef RTCARPLAY_INTERNET_SHARE
+    LOCK_TCPIP_CORE();
+#endif
 #if RT_USING_LWIP_VER_NUM >= 0x20102
     netdev_low_level_set_dns_server(netdev, dns_num, dns_server);
 #else
@@ -187,6 +208,9 @@ static int lwip_netdev_set_dns_server(struct netdev *netdev, uint8_t dns_num, ip
 
     dns_setserver(dns_num, dns_server);
 #endif /* RT_USING_LWIP_VER_NUM >= 0x20102 */
+#ifdef RTCARPLAY_INTERNET_SHARE
+    UNLOCK_TCPIP_CORE();
+#endif
     return ERR_OK;
 }
 #endif /* RT_LWIP_DNS */
@@ -194,6 +218,9 @@ static int lwip_netdev_set_dns_server(struct netdev *netdev, uint8_t dns_num, ip
 #ifdef RT_LWIP_DHCP
 static int lwip_netdev_set_dhcp(struct netdev *netif, rt_bool_t is_enabled)
 {
+#ifdef RTCARPLAY_INTERNET_SHARE
+    LOCK_TCPIP_CORE();
+#endif
     netdev_low_level_set_dhcp_status(netif, is_enabled);
 
     if(RT_TRUE == is_enabled)
@@ -205,6 +232,9 @@ static int lwip_netdev_set_dhcp(struct netdev *netif, rt_bool_t is_enabled)
         dhcp_stop((struct netif *)netif->user_data);
     }
 
+#ifdef RTCARPLAY_INTERNET_SHARE
+    UNLOCK_TCPIP_CORE();
+#endif
     return ERR_OK;
 }
 #endif /* RT_LWIP_DHCP */
@@ -666,6 +696,9 @@ rt_err_t eth_device_init(struct eth_device * dev, const char *name)
 
 void eth_device_deinit(struct eth_device *dev)
 {
+#ifdef RTCARPLAY_INTERNET_SHARE
+    LOCK_TCPIP_CORE();
+#endif
     struct netif* netif = dev->netif;
 
 #if LWIP_DHCP
@@ -676,6 +709,9 @@ void eth_device_deinit(struct eth_device *dev)
     netif_remove(netif);
 #ifdef RT_USING_NETDEV
     netdev_del(netif);
+#endif
+#ifdef RTCARPLAY_INTERNET_SHARE
+    UNLOCK_TCPIP_CORE();
 #endif
     rt_device_close(&(dev->parent));
     rt_device_unregister(&(dev->parent));

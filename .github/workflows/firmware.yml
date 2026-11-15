@@ -22,6 +22,13 @@ jobs:
         run: packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
       - name: Check actual composition, media, pairing and transports
         run: make -C application/rt-thread/rtcarplay -j8 check
+      - name: Preserve actual lwIP route evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: internet-route-host-${{ github.sha }}
+          path: application/rt-thread/rtcarplay/build/internet-share/internet-routing.pcap
+          if-no-files-found: error
+          retention-days: 14
       - name: Render and exercise the actual LVGL 9 Launcher V2
         run: |
           cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B build/launcher-preview -DCMAKE_BUILD_TYPE=Debug

@@ -35,6 +35,9 @@ cp .config "$dest/firmware.config"
 cp "$pack/.image_cfg.json.tmp" "$dest/image-layout.json"
 {
   printf 'sdk_commit=%s\n' "$(git rev-parse HEAD)"
+  printf 'source_worktree_changes_begin\n'
+  git status --porcelain --untracked-files=all -- . ':!target/d21x/demo128-nand-carplay/pack/bootloader.bin'
+  printf 'source_worktree_changes_end\n'
   printf 'variant=%s\ndefconfig=%s\n' "$variant" "$config"
   git submodule status --recursive
   toolchain/bin/riscv64-unknown-elf-gcc --version | head -1

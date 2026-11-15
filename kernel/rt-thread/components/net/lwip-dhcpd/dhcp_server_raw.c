@@ -89,7 +89,12 @@
 /** Mac address length  */
 #define DHCP_MAX_HLEN               6
 /** dhcp default live time */
+#ifdef RTCARPLAY_INTERNET_SHARE
+#define DHCP_DEFAULT_LIVE_TIME 60U
+extern unsigned carplay_dhcp_internet_options(struct netif *, u8_t *);
+#else
 #define DHCP_DEFAULT_LIVE_TIME      0x80510100
+#endif
 
 /** Minimum length for request before packet is parsed */
 #define DHCP_MIN_REQUEST_LEN        44
@@ -412,6 +417,9 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
             SMEMCPY(opt_buf, &ip_2_ip4(&dhcp_server->netif->netmask)->addr, 4);
             opt_buf += 4;
 
+#ifdef RTCARPLAY_INTERNET_SHARE
+            opt_buf += carplay_dhcp_internet_options(dhcp_server->netif, opt_buf);
+#else
             *opt_buf++ = DHCP_OPTION_DNS_SERVER;
             *opt_buf++ = 4;
 #ifdef DHCP_DNS_SERVER_IP
@@ -430,6 +438,7 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
             *opt_buf++ = 4;
             SMEMCPY(opt_buf, &ip_2_ip4(&dhcp_server->netif->ip_addr)->addr, 4);
             opt_buf += 4;
+#endif
 
             /* add option end */
             *opt_buf++ = DHCP_OPTION_END;
@@ -489,6 +498,9 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
                         SMEMCPY(opt_buf, &ip_2_ip4(&dhcp_server->netif->netmask)->addr, 4);
                         opt_buf += 4;
 
+#ifdef RTCARPLAY_INTERNET_SHARE
+                        opt_buf += carplay_dhcp_internet_options(dhcp_server->netif, opt_buf);
+#else
                         *opt_buf++ = DHCP_OPTION_DNS_SERVER;
                         *opt_buf++ = 4;
 #ifdef DHCP_DNS_SERVER_IP
@@ -507,6 +519,7 @@ dhcp_server_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t
                         *opt_buf++ = 4;
                         SMEMCPY(opt_buf, &ip_2_ip4(&dhcp_server->netif->ip_addr)->addr, 4);
                         opt_buf += 4;
+#endif
 
                         /* add option end */
                         *opt_buf++ = DHCP_OPTION_END;

@@ -91,6 +91,9 @@
 #endif
 
 #include <rtthread.h>
+#if IP_NAPT
+#include "lwip/napt_policy.h"
+#endif
 
 #ifdef RT_USING_NETDEV
 #include "lwip/netdb.h"
@@ -766,6 +769,9 @@ netif_remove(struct netif *netif)
 #endif
 
   LWIP_ASSERT_CORE_LOCKED();
+#if IP_NAPT
+  napt_policy_detach(netif);
+#endif
 
   if (netif == NULL) {
     return;
@@ -949,6 +955,9 @@ void
 netif_set_down(struct netif *netif)
 {
   LWIP_ASSERT_CORE_LOCKED();
+#if IP_NAPT
+  napt_policy_detach(netif);
+#endif
 
   LWIP_ERROR("netif_set_down: invalid netif", netif != NULL, return);
 
@@ -1066,6 +1075,9 @@ void
 netif_set_link_down(struct netif *netif)
 {
   LWIP_ASSERT_CORE_LOCKED();
+#if IP_NAPT
+  napt_policy_detach(netif);
+#endif
 
   LWIP_ERROR("netif_set_link_down: invalid netif", netif != NULL, return);
 
