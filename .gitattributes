@@ -6,3 +6,4 @@ bsp/peripheral/wireless/realtek/wlan_lib/libwlan_rtl8733_full_c906fd.a filter=lf
 /packages/third-party/cherryusb-luban/** text eol=lf
 /packages/third-party/cherryusb-luban/**/*.patch text eol=lf -whitespace
 /packages/third-party/cherryusb-luban/**/*.sh text eol=lf
+/application/rt-thread/rtcarplay/**/*.png binary
