@@ -38,6 +38,8 @@ jobs:
           mkdir -p output/ultra-host/screens
           output/ultra-preview/launcher_preview output/ultra-host/screens
           output/ultra-preview/fusion_preview output/ultra-host/screens
+          mkdir -p output/ultra-host/screens/display
+          output/ultra-preview/launcher_fusion_settings_preview output/ultra-host/screens/display
       - uses: actions/upload-artifact@v4
         if: always()
         with:
