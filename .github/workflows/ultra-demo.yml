@@ -23,10 +23,16 @@ jobs:
         with:
           lfs: true
           submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: SDK and integration Host regressions
         run: |
           set -euo pipefail
           mkdir -p output/ultra-host
+          python3 -m pip install clang-format==23.1.1
+          python3 packages/third-party/rt-carplay/scripts/format-code.py --check
+          python3 packages/third-party/rt-carplay/scripts/format-code.py --root application/rt-thread/rtcarplay --check
           bash packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
           make -C packages/third-party/rt-carplay -j8 check 2>&1 | tee output/ultra-host/sdk.log
           make -C application/rt-thread/rtcarplay -j8 check 2>&1 | tee output/ultra-host/integration.log
