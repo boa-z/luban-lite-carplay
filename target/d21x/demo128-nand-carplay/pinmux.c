@@ -286,7 +286,9 @@ struct aic_pinmux aic_pinmux_config[] = {
     {7, PIN_PULL_DIS, 3, "PC.5"},
 #endif
 #ifdef AIC_USING_PWM3
-    {7, PIN_PULL_DIS, 3, "PC.6"},
+    /* PC.7 is LCD_PWM (PWM ch3 output B) into the panel backlight boost.
+     * PC.6 stays on SDMC1 detect: it is AIC_SDMC1_HOTPLUG_PIN on this board,
+     * and claiming it here would break card hotplug. */
     {7, PIN_PULL_DIS, 3, "PC.7"},
 #endif
 #ifdef AIC_USING_GPAI0
