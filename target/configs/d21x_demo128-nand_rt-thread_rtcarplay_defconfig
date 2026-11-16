@@ -221,6 +221,10 @@ CONFIG_RT_USING_LWIP_IPV6=y
 CONFIG_RTCARPLAY_DIR="../../../packages/third-party/rt-carplay"
 
 CONFIG_RTCARPLAY_DEMO_LAUNCHER=y
+# The panel presents Classic video and the right-hand local instrument strip
+# on one 1024x600 screen. Settings switches FULLSCREEN (native 1024x600) and
+# FUSION (768x600 video + 256 px strip) by rebuilding the session at runtime.
+CONFIG_RTCARPLAY_SINGLE_SCREEN_FUSION=y
 
 # Ethernet -> CarPlay AP sharing; physical PHY/route validation required.
 CONFIG_AIC_USING_GMAC0=y
