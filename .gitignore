@@ -23,6 +23,7 @@ packages/packages.dbsqlite
 packages/pkgs_error.json
 packages/pkgs.json
 .clang-format
+!/application/rt-thread/rtcarplay/.clang-format
 .commit
 .editorconfig
 .gitattributes
