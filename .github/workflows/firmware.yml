@@ -9,11 +9,44 @@ concurrency:
   group: firmware-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  host:
+    name: Host regressions and LVGL renders
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: SDK and integration Host regressions
+        run: |
+          set -euo pipefail
+          mkdir -p output/host
+          python3 -m pip install clang-format==23.1.1
+          python3 packages/third-party/rt-carplay/scripts/format-code.py --check
+          python3 packages/third-party/rt-carplay/scripts/format-code.py --root application/rt-thread/rtcarplay --check
+          bash packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
+          make -C packages/third-party/rt-carplay -j8 check 2>&1 | tee output/host/sdk.log
+          make -C application/rt-thread/rtcarplay -j8 check 2>&1 | tee output/host/integration.log
+      - name: Render the actual LVGL launcher and fusion strip
+        run: |
+          set -euo pipefail
+          cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B output/host-preview -DCMAKE_BUILD_TYPE=Debug
+          cmake --build output/host-preview -j8
+          mkdir -p output/host/screens
+          output/host-preview/launcher_preview output/host/screens
+          output/host-preview/fusion_preview output/host/screens
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: carplay-host-${{ github.sha }}
+          path: output/host/
   firmware:
+    needs: host
     name: Build and publish preview firmware
-    # Ultra milestones use ultra-demo.yml artifacts until separately approved
-    # for the rolling Classic release. Keep ordinary preview pushes unchanged.
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[ultra-dev]')
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     # The workflow's only product is the rolling preview release.
@@ -31,15 +64,6 @@ jobs:
           python3 -m venv .ci-venv
           .ci-venv/bin/pip install -r .ci/requirements.txt
           echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
-      - name: Test OTA, wired integration and actual LVGL launcher
-        run: |
-          bash packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
-          make -C application/rt-thread/rtcarplay check-ota
-          make -C application/rt-thread/rtcarplay check-native-ncm check-lubanlite-usb check-wired-identity check-wired-trace check-iap2-endpoints check-usb-iap2-worker
-          cmake -S application/rt-thread/rtcarplay/tests/launcher_preview -B output/launcher-preview -DCMAKE_BUILD_TYPE=Debug
-          cmake --build output/launcher-preview -j8
-          mkdir -p output/launcher-screens
-          output/launcher-preview/launcher_preview output/launcher-screens
       - name: Build Bootloader and complete IMG
         env:
           PYTHONUNBUFFERED: '1'
@@ -68,10 +92,10 @@ jobs:
              \`d213-carplay.img\` over USB. That image contains the A/B
              bootloader and the env layout; OTA alone cannot switch slots
              until this one-time migration is done.
-          2. Afterwards, use Settings → FIRMWARE & UPDATES, or run
+          2. Afterwards, use Settings → System update, or run
              \`carplay_ota check\`, inspect \`carplay_ota status\`, then
              explicitly run \`carplay_ota install\` in the console.
-          3. On the device, Settings → FIRMWARE & UPDATES runs the nightly
+          3. On the device, Settings → System update runs the nightly
              channel: it compares the commit compiled into the running image
              with \`commit=\` in \`version.txt\` and reports any difference as an
              update. Nothing is installed until the on-screen confirmation;
@@ -85,7 +109,18 @@ jobs:
           USB link (\`n0\`) is not an Internet uplink.
           EOF
 
+      - name: Upload development image
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: d213-carplay-${{ github.sha }}
+          path: output/ci/
+          if-no-files-found: ignore
+          retention-days: 14
+      # A [ultra-dev] milestone still builds and uploads the image above, but
+      # does not replace the rolling release until it is reviewed.
       - name: Publish rolling preview release
+        if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[ultra-dev]')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
