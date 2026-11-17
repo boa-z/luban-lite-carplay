@@ -1,15 +1,16 @@
 {
   "date": "2026-11-17",
-  "sdk_commit": "06caef022b7e47568201e764c8969ffc61c9a60e",
+  "sdk_commit": "b2240011bad7cffd7e336d67800b22796c9727b4",
   "checks": {
     "androidauto_firmware": "PASS",
     "sdk_windows_ctest": "PASS 5/5",
     "sdk_linux_asan_ubsan": "PASS 5/5",
     "sdk_rtthread_d213_archive": "PASS",
-    "upstream_protobuf_fixtures": "PASS 14/14",
+    "upstream_protobuf_fixtures": "PASS 17/17",
     "phone": "NOT_RUN",
     "board": "NOT_RUN",
-    "dhu": "NOT_RUN"
+    "dhu": "NOT_RUN",
+    "shared_configuration_restore": "PASS 7/7 byte comparisons"
   },
   "prior_ui_checkpoint": {
     "product_commit": "35b57bfe7a34bca802fbdb7d264074dfe61106b2",
@@ -25,12 +26,18 @@
   },
   "artifacts": {
     "d21x.elf": {
-      "size": 28388224,
-      "sha256": "f6b2b0cfce2169fcc02b22a1974fc86b46634f7118059976b2fcd805e597b773"
+      "size": 28412016,
+      "sha256": "907d0a00c2481e5ddc5bf2cda99c96e645dd2f7c4640a8adabc0edc041dfd8fb"
     },
     "d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img": {
-      "size": 3967488,
-      "sha256": "ae2181c43bc50a3d09930e373da56faf215acb4880ce88837823322609328cb3"
+      "size": 3969536,
+      "sha256": "c8ffb34fe16e2dc9c349f7b776ab0db2ec9b168ea5b7d0df523b8b9e1742487b"
     }
-  }
+  },
+  "scope": "Optional text-only media-info channel with retained latest updates, console query and reset on retirement; no UI changes",
+  "sdk_ci": {
+    "url": "https://github.com/boa-z/rt-androidauto/actions/runs/44066708129",
+    "result": "PASS Windows/Linux"
+  },
+  "build_log": "output/androidauto-integration/media-info-final-build.log"
 }

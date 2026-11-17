@@ -76,18 +76,26 @@ protocol errors require an explicit restart after correction.
 ## Validation and remaining work
 
 Software checkpoint: 2026-11-17. SDK gitlink:
-`06caef022b7e47568201e764c8969ffc61c9a60e`.
+`b2240011bad7cffd7e336d67800b22796c9727b4`.
 Its Windows and Linux CI passed:
-https://github.com/boa-z/rt-androidauto/actions/runs/44061601623
+https://github.com/boa-z/rt-androidauto/actions/runs/44066708129
 
 This SDK adds navigation focus, voice/battery notifications, call availability
 output, legacy service close/reopen, fragmented microphone TX, multiple TLS
 records per AAP fragment, configurable 32-key/rotary input and sensor scheduler
-callbacks. Its independent protobuf oracle checks 14 fixtures; Windows and Linux
+callbacks. Its independent protobuf oracle checks 17 fixtures; Windows and Linux
 ASan/UBSan tests pass 5/5. See the SDK's `docs/wired-extensions.md` for exact scope.
 The demo grants projected navigation focus because it has no native navigator;
 adding native navigation requires a real arbitration policy. The dashboard is
-unchanged. `RTANDROIDAUTO_PROTOCOL_MINOR` defaults to 1; a higher negotiation
+unchanged. The optional media-info channel now receives phone playback status
+and text metadata. Use `androidauto_media` in the console to inspect the latest
+individual status and metadata updates; missing fields remain absent, and
+channel/session retirement clears both records. A notification without a field
+does not fabricate a value. The console prints nothing for an absent field.
+Each text field is bounded to 255 bytes. Album art, uncertain metadata fields
+and instrument-cluster interaction are unsupported; see the SDK's
+`docs/media-information.md`. This uses a separate dynamic service descriptor,
+not the PCM audio channel. `RTANDROIDAUTO_PROTOCOL_MINOR` defaults to 1; a higher negotiation
 ceiling does not imply full modern protocol support or phone compatibility.
 
 - The Android Auto app cross-compiles and packages an ELF and NAND image.

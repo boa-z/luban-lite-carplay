@@ -120,6 +120,7 @@ static int create_receiver(rtaa_receiver **out, uint32_t *generation, bool mode)
 #endif
     c.channels[RTAA_INPUT] = (rtaa_channel_config){9, 4096};
     c.channels[RTAA_SENSOR] = (rtaa_channel_config){11, 4096};
+    c.channels[RTAA_MEDIA_INFO] = (rtaa_channel_config){13, 32768};
     /* Mic stays unadvertised until a bounded capture/AEC adapter exists. */
     c.name = "Luban-Lite Android Auto";
     c.manufacturer = "boa-z";
