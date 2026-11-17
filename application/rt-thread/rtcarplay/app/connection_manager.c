@@ -11,6 +11,21 @@
 #include "iap2_link_lubanlite.h"
 #include "rtcp/rtcp.h"
 #include "launcher_preferences.h"
+#if defined(RTCARPLAY_SHARED_DEMO_UI)
+#include <rthw.h>
+static atomic_bool projection_enabled, projection_retired;
+void carplay_connection_enable(bool enabled)
+{
+    rt_base_t flags = rt_hw_interrupt_disable();
+    projection_retired = false;
+    projection_enabled = enabled;
+    rt_hw_interrupt_enable(flags);
+}
+bool carplay_connection_retired(void)
+{
+    return projection_retired && !projection_enabled;
+}
+#endif
 #if defined(RTCARPLAY_MICROPHONE)
 #include "audio_input_lubanlite.h"
 #endif
@@ -148,6 +163,9 @@ static bool mode_changed(void)
 {
     (void)rt_mutex_take(status_lock, RT_WAITING_FOREVER);
     bool changed = requested_wireless != status.wireless;
+#if defined(RTCARPLAY_SHARED_DEMO_UI)
+    changed |= !projection_enabled;
+#endif
 #if defined(RTCARPLAY_SINGLE_SCREEN_FUSION)
     changed |= display_pending;
 #endif
@@ -478,6 +496,9 @@ static int wireless_connection(void)
 static void demo_worker(void *argument)
 {
     (void)argument;
+#if defined(RTCARPLAY_SHARED_DEMO_UI)
+    bool paused = false;
+#endif
     int ret = carplay_usb_open();
     usb_armed = ret == RTCP_OK;
     usb_open_at = rt_tick_get_millisecond() + 5000U;
@@ -490,6 +511,24 @@ static void demo_worker(void *argument)
 
     for (;;)
     {
+#if defined(RTCARPLAY_SHARED_DEMO_UI)
+        if (!projection_enabled)
+        {
+            if (!paused) close_session();
+            paused = true;
+            publish(DEMO_WAIT, 0);
+            rt_base_t flags = rt_hw_interrupt_disable();
+            projection_retired = !projection_enabled;
+            rt_hw_interrupt_enable(flags);
+            rt_thread_mdelay(50);
+            continue;
+        }
+        if (paused)
+        {
+            paused = false;
+            (void)carplay_fusion_set_mode(requested_display);
+        }
+#endif
         if (mode_changed())
         {
             close_session();

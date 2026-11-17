@@ -5,6 +5,15 @@ source "packages/third-party/rt-carplay/Kconfig"
 
 menu "rt-carplay application"
 
+config RTCARPLAY_SHARED_DEMO_UI
+    bool "Protocol-independent Mobility Cockpit UI"
+    default n
+    depends on RTCARPLAY_DEMO_LAUNCHER && RTCARPLAY_SINGLE_SCREEN_FUSION
+    help
+      Use the same demo_ui.c presentation as the independent rtprojection
+      Android Auto app. CarPlay is supplied through an application adapter.
+      The legacy launcher remains available while the shared UI is developed.
+
 config RTCARPLAY_SINGLE_SCREEN_FUSION
     select LV_FONT_MONTSERRAT_12
     bool "Single-screen CarPlay and local vehicle instruments"

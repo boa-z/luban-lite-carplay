@@ -36,7 +36,10 @@ void lv_wait_fs_mounted(void)
 
 void lv_user_gui_init(void)
 {
-#if defined(RTCARPLAY_DEMO_LAUNCHER)
+#if defined(RTPROJECTION_DEMO)
+    extern void projection_demo_gui_init(void);
+    projection_demo_gui_init();
+#elif defined(RTCARPLAY_DEMO_LAUNCHER)
     extern void carplay_demo_launcher_init(void);
     carplay_demo_launcher_init();
 #elif defined(AIC_LVGL_DEMO) && !defined(RT_USING_MODULE)

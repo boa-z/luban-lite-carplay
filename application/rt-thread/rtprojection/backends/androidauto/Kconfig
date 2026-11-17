@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-3.0-only
+source "packages/third-party/rt-androidauto/Kconfig"
+
+menu "Android Auto backend"
+config RTANDROIDAUTO_USB
+    bool "CherryUSB AOA transport on the dedicated phone host port"
+    default y
+    depends on LPKG_USING_RT_ANDROIDAUTO && LPKG_CHERRYUSB_HOST
+
+config RTANDROIDAUTO_CREDENTIAL_DIR
+    string "Provisioned TLS identity and peer pin directory"
+    default "/data/androidauto"
+    help
+      Requires client.pem, client.key and peer.sha256 (32 raw bytes).
+      No default identity, test key or trust-all policy is installed.
+
+config RTANDROIDAUTO_USB_BUS
+    int "CherryUSB bus for the dedicated Android phone connector"
+    default 1 if AIC_USING_USB0_HOST
+    default 0
+    range 0 1
+    depends on RTANDROIDAUTO_USB
+    help
+      USB1 is bus 0 when USB0 is not a host, and bus 1 when both are hosts.
+      The AOA adapter never sends vendor requests to another host bus.
+
+config RTANDROIDAUTO_AUTO_START
+    bool "Arm wired receiver automatically at boot"
+    default n
+    depends on RTANDROIDAUTO_USB
+
+config RTANDROIDAUTO_VIDEO
+    bool "MPP H.264 decoder and DE video output"
+    default y
+    depends on RTANDROIDAUTO_USB && AIC_MPP_H264_DEC_ENABLE
+
+config RTANDROIDAUTO_AUDIO
+    bool "Media/System/Speech PCM playback through sound0"
+    default y
+    depends on RTANDROIDAUTO_USB && RT_USING_AUDIO
+endmenu

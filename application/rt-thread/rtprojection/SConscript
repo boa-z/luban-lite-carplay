@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-3.0-only
+import os
+from building import *
+cwd = GetCurrentDir()
+root = os.path.normpath(os.path.join(cwd, '..', '..', '..'))
+aa = os.path.join(cwd, 'backends', 'androidauto')
+cp = os.path.join(cwd, '..', 'rtcarplay')
+usb = os.path.join(root, 'packages', 'third-party', 'cherryusb')
+src = Glob('main.c') + Glob('app/*.c') + Glob('ui/*.c')
+src += Glob('backends/androidauto/app/*.c') + Glob('backends/androidauto/platform/*.c')
+# Reuse the very same presentation sources. Never compile the CarPlay
+# launcher, receiver, touch reader, transport, decoder or mixer in this app.
+for name in ('demo_ui.c', 'demo_dashboard.c', 'ui_language.c', 'carplay_ui_theme.c'):
+    src += Glob('../rtcarplay/ui/' + name)
+src += Glob('../rtcarplay/ui/fonts/*.c') + Glob('../rtcarplay/ui/icons/*.c')
+src += Glob('../rtcarplay/platform/audio_volume_lubanlite.c')
+src += Glob('../rtcarplay/platform/backlight_lubanlite.c')
+src += Glob('../rtcarplay/platform/demo_display_lubanlite.c')
+paths = [cwd, cwd + '/app', cwd + '/ui', aa + '/app', aa + '/platform',
+         cp + '/ui', cp + '/platform',
+         root + '/packages/third-party/rt-androidauto/include',
+         root + '/packages/artinchip/aic-authorization/authorization',
+         root + '/packages/third-party/cherryusb-luban']
+paths += [usb + '/' + part for part in ('common', 'core', 'class/hub')]
+group = DefineGroup('ProjectionDemo', src, depend=['RTPROJECTION_DEMO'],
+                    CPPPATH=paths, LOCAL_CCFLAGS=' -std=c11')
+Return('group')

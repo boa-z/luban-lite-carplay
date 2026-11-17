@@ -440,7 +440,8 @@ void lv_port_disp_init(void)
 
 #ifndef AIC_MONKEY_TEST
 /* The standalone receiver owns the exclusive CTP device and its IRQ. */
-#if defined(KERNEL_RTTHREAD) && defined(AIC_USING_TOUCH) && !defined(RTCARPLAY_TOUCH_PANEL)
+#if defined(KERNEL_RTTHREAD) && defined(AIC_USING_TOUCH) && \
+    (!defined(RTCARPLAY_TOUCH_PANEL) || defined(RTCARPLAY_SHARED_DEMO_UI))
     int result = tpc_run(AIC_TOUCH_PANEL_NAME, fb_info.width, fb_info.height);
     if (result) {
         LV_LOG_INFO("can't find touch panel\n");

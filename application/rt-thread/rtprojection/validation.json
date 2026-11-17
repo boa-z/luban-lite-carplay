@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-17",
+  "sdk_commit": "23940469a4c685ce9b2f9efee67fe90eb682c35e",
+  "checks": {
+    "androidauto_firmware": "PASS",
+    "carplay_shared_ui_firmware": "PASS",
+    "carplay_host_make_check": "PASS",
+    "shared_lvgl_preview": "PASS",
+    "projection_policy": "PASS",
+    "legacy_dashboard_extraction_changed_pixels": 0,
+    "shared_vs_legacy_dashboard_changed_pixels": 23,
+    "shared_vs_legacy_max_channel_difference": 1,
+    "phone": "NOT_RUN",
+    "board": "NOT_RUN",
+    "dhu": "NOT_RUN"
+  },
+  "artifacts": {
+    "d21x.elf": {
+      "size": 28376936,
+      "sha256": "8b1e8307effe34922f0f1a976cb4a98d4848c713b11c30d6a378c6f23271fca4"
+    },
+    "d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img": {
+      "size": 3965440,
+      "sha256": "2ab57b418304400b97ede92815b3749e11e506b3abbe2a0a915a1ba97510304a"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-only
+source "application/rt-thread/rtprojection/backends/androidauto/Kconfig"
+config RTPROJECTION_DEMO
+    bool
+    default y
+    select LV_FONT_MONTSERRAT_14
+    select LV_FONT_MONTSERRAT_16
+    select LV_FONT_MONTSERRAT_24
+    select LV_FONT_MONTSERRAT_32
+    depends on LPKG_USING_LVGL && LVGL_V_9 && RTANDROIDAUTO_USB
+    depends on !RT_USING_MODULE && !RTANDROIDAUTO_AUTO_START

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdint.h>
 #include "lvgl.h"
+#include "demo_dashboard.h"
 #include "connection_manager.h"
 #include "internet_share_lubanlite.h"
 #include "carplay_app.h"
@@ -378,92 +379,21 @@ static void clock_text(char *out, size_t size)
  * time (the reference PNG shows them overlapping), so the cluster keeps the
  * design anchors whenever the measured label fits and otherwise slides left
  * only as far as the current clock ink requires. */
-#define DASH_CLOCK_RIGHT  964
-#define DASH_STATUS_X     847
-#define DASH_STATUS_GAP   16 /* minimum clear space before the clock ink */
-#define DASH_STATUS_MIN_X 560
-#define DASH_DOT_SIZE     11
-#define DASH_DOT_GAP      12
-
-static int32_t label_width(lv_obj_t *label)
-{
-    const lv_font_t *font = lv_obj_get_style_text_font(label, 0);
-    const char *value = lv_label_get_text(label);
-    return lv_text_get_width(value, strlen(value), font, 0);
-}
-
-/* Places the dot and the status label from their rendered widths. Called on
- * every content or language change; writes only when the geometry moved. */
+static demo_dashboard dashboard_view;
 static void layout_dashboard_status(void)
 {
-    if (!dash_status || !dash_clock || !dash_dot)
-        return;
-    int32_t width = label_width(dash_status) + 2; /* rounding slack, no clipping */
-    int32_t limit = DASH_CLOCK_RIGHT - label_width(dash_clock) - DASH_STATUS_GAP;
-    int32_t left = DASH_STATUS_X;
-    if (left + width > limit)
-        left = limit - width;
-    if (left < DASH_STATUS_MIN_X)
-        left = DASH_STATUS_MIN_X;
-    int32_t dot_x = left - DASH_DOT_GAP - DASH_DOT_SIZE;
-    if (lv_obj_get_x(dash_status) != left || lv_obj_get_width(dash_status) != width)
-    {
-        lv_obj_set_pos(dash_status, left, 64);
-        lv_obj_set_width(dash_status, width);
-    }
-    if (lv_obj_get_x(dash_dot) != dot_x)
-        lv_obj_set_pos(dash_dot, dot_x, 63);
+    demo_dashboard_layout(&dashboard_view);
 }
-
 static void build_dashboard(lv_obj_t *parent)
 {
-    text(parent, "Dashboard", 64, 54, 520, &carplay_ui_34, CARPLAY_STYLE_TEXT);
-    dash_dot = stroke(parent, 824, 63, 11, 11, LV_RADIUS_CIRCLE, CARPLAY_STYLE_DOT_OFF);
-    /* The clock is right-aligned against the reference anchor x = 964; it owns
-     * that slot and the state dot plus label are placed to its left. */
-    dash_clock = text(parent, "--:--", DASH_CLOCK_RIGHT - 84, 62, 84,
-                      &carplay_ui_17, CARPLAY_STYLE_MUTED);
-    lv_obj_set_style_text_align(dash_clock, LV_TEXT_ALIGN_RIGHT, 0);
-    dash_status = text(parent, "Not connected", DASH_STATUS_X, 64, 210, &carplay_ui_14,
-                       CARPLAY_STYLE_MUTED);
-    layout_dashboard_status();
-    dash_note = text(parent, "Demo values", 64, 92, 300, &carplay_ui_14, CARPLAY_STYLE_FAINT);
-
-    text(parent, "Speed", 70, 160, 300, &carplay_ui_21, CARPLAY_STYLE_MUTED);
-    dash_speed = text(parent, "--", 62, 236, 380, &carplay_display_220, CARPLAY_STYLE_TEXT);
-    text(parent, "km/h", 473, 353, 160, &carplay_ui_34, CARPLAY_STYLE_MUTED);
-
-    divider(parent, 649, 152, 1, 316);
-    text(parent, "Battery", 711, 160, 260, &carplay_ui_21, CARPLAY_STYLE_MUTED);
-    dash_soc = text(parent, "--", 699, 247, 240, &carplay_display_110, CARPLAY_STYLE_TEXT);
-    text(parent, "%", 880, 301, 80, &carplay_ui_34, CARPLAY_STYLE_MUTED);
-    dash_bar = lv_bar_create(parent);
-    lv_obj_remove_flag(dash_bar, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(dash_bar, 718, 367);
-    lv_obj_set_size(dash_bar, 224, 8);
-    lv_bar_set_range(dash_bar, 0, 100);
-    lv_obj_set_style_radius(dash_bar, 4, 0);
-    lv_obj_set_style_radius(dash_bar, 4, LV_PART_INDICATOR);
-    carplay_ui_style_part(dash_bar, CARPLAY_STYLE_BAR_BG, LV_PART_MAIN);
-    carplay_ui_style_part(dash_bar, CARPLAY_STYLE_BAR_FILL, LV_PART_INDICATOR);
-
-    divider(parent, 64, 485, 896, 1);
-
-    lv_obj_t *connectivity = panel(parent, 64, 505, 437, 67, 14, CARPLAY_STYLE_ACCENT_CARD);
-    lv_obj_add_flag(connectivity, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(connectivity, open_connectivity, LV_EVENT_CLICKED, NULL);
-    icon_mask(connectivity, &carplay_icon_smartphone_24, 19, 22, CARPLAY_STYLE_ICON_ACCENT);
-    lv_obj_t *connectivity_text = text(connectivity, "Connectivity", 0, 0, 0,
-                                       &carplay_ui_18, CARPLAY_STYLE_ACCENT_TEXT);
-    lv_obj_center(connectivity_text);
-
-    lv_obj_t *settings = panel(parent, 523, 505, 437, 67, 14, CARPLAY_STYLE_CARD);
-    lv_obj_add_flag(settings, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(settings, open_settings, LV_EVENT_CLICKED, NULL);
-    icon_mask(settings, &carplay_icon_settings_24, 19, 21, CARPLAY_STYLE_ICON_TEXT);
-    lv_obj_t *settings_text = text(settings, "Settings", 0, 0, 0, &carplay_ui_18,
-                                   CARPLAY_STYLE_TEXT);
-    lv_obj_center(settings_text);
+    demo_dashboard_build(parent, &dashboard_view, open_connectivity, open_settings);
+    dash_dot = dashboard_view.dot;
+    dash_clock = dashboard_view.clock;
+    dash_status = dashboard_view.status;
+    dash_note = dashboard_view.note;
+    dash_speed = dashboard_view.speed;
+    dash_soc = dashboard_view.soc;
+    dash_bar = dashboard_view.bar;
 }
 
 /* Header shared by the three inner pages. */

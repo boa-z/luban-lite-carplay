@@ -4,3 +4,6 @@
 [submodule "packages/third-party/cherryusb-ipheth"]
 	path = packages/third-party/cherryusb-ipheth
 	url = https://github.com/boa-z/cherryusb-ipheth.git
+[submodule "packages/third-party/rt-androidauto"]
+	path = packages/third-party/rt-androidauto
+	url = https://github.com/boa-z/rt-androidauto.git

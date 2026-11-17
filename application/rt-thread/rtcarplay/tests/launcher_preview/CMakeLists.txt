@@ -8,6 +8,7 @@ set(LV_CONF_BUILD_DISABLE_THORVG_INTERNAL ON CACHE BOOL "" FORCE)
 add_subdirectory("${SDK_ROOT}/packages/artinchip/lvgl-ui/lvgl_v9/lvgl" lvgl)
 
 set(UI_SOURCES
+    ../../ui/demo_dashboard.c
     ../../ui/ui_language.c
     ../../ui/carplay_ui_theme.c
     ../../ui/icons/carplay_icons.c
@@ -51,3 +52,17 @@ target_compile_definitions(fusion_preview PRIVATE RTCARPLAY_SINGLE_SCREEN_FUSION
     CARPLAY_PREFERENCES_EXTERNAL_PROVIDER)
 target_compile_options(fusion_preview PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fusion_preview PRIVATE lvgl m)
+
+# Same shared UI source used by the independent Android Auto application.
+# Modeled backend checks routing/composition requests, never phone acceptance.
+add_executable(shared_ui_preview shared_main.c)
+target_sources(shared_ui_preview PRIVATE ${UI_SOURCES})
+target_include_directories(shared_ui_preview PRIVATE ../../ui)
+target_compile_options(shared_ui_preview PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+target_link_libraries(shared_ui_preview PRIVATE lvgl m)
+
+add_executable(projection_policy_test
+    ../../../rtprojection/tests/test_projection_policy.c
+    ../../../rtprojection/app/projection_policy.c)
+target_include_directories(projection_policy_test PRIVATE ../../../rtprojection/app)
+target_compile_options(projection_policy_test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
