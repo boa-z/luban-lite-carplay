@@ -23,6 +23,30 @@ config RTANDROIDAUTO_CREDENTIAL_DIR
       Requires client.pem, client.key and peer.sha256 (32 raw bytes).
       No default identity, test key or trust-all policy is installed.
 
+config SETTINGS
+    bool
+    help
+      Zephyr settings core backed by the shared Luban-Lite DFS adapter.
+
+config RTANDROIDAUTO_WIRELESS
+    bool "Wireless AA: WPA2 5GHz AP, Bluetooth RFCOMM bootstrap and TCP"
+    default n
+    depends on LPKG_USING_RT_ANDROIDAUTO && AIC_WLAN_REALTEK
+    depends on RT_USING_LWIP && LWIP_USING_DHCPD && RT_USING_DFS
+    depends on LPKG_USING_ZEPHYR_BLUETOOTH && LPKG_BT_CLASSIC && LPKG_BT_RFCOMM
+    select SETTINGS
+    select LPKG_BT_SETTINGS
+    help
+      Requires provisioned wireless.conf and TLS credentials. Pairing uses
+      explicit numeric comparison via the androidauto_pair shell command.
+      This development profile does not advertise HFP. Phones that require
+      an established real HFP connection may not start wireless projection.
+
+config RTANDROIDAUTO_WIRELESS_DEFAULT
+    bool "Select wireless transport at boot (receiver remains unarmed)"
+    depends on RTANDROIDAUTO_WIRELESS && !RTANDROIDAUTO_AUTO_START
+    default n
+
 config RTANDROIDAUTO_USB_BUS
     int "CherryUSB bus for the dedicated Android phone connector"
     default 1 if AIC_USING_USB0_HOST
@@ -41,10 +65,10 @@ config RTANDROIDAUTO_AUTO_START
 config RTANDROIDAUTO_VIDEO
     bool "MPP H.264 decoder and DE video output"
     default y
-    depends on RTANDROIDAUTO_USB && AIC_MPP_H264_DEC_ENABLE
+    depends on (RTANDROIDAUTO_USB || RTANDROIDAUTO_WIRELESS) && AIC_MPP_H264_DEC_ENABLE
 
 config RTANDROIDAUTO_AUDIO
     bool "Media/System/Speech PCM playback through sound0"
     default y
-    depends on RTANDROIDAUTO_USB && RT_USING_AUDIO
+    depends on (RTANDROIDAUTO_USB || RTANDROIDAUTO_WIRELESS) && RT_USING_AUDIO
 endmenu

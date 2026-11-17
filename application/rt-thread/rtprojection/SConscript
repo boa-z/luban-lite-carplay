@@ -22,6 +22,14 @@ paths = [cwd, cwd + '/app', cwd + '/ui', aa + '/app', aa + '/platform',
          root + '/packages/artinchip/aic-authorization/authorization',
          root + '/packages/third-party/cherryusb-luban']
 paths += [usb + '/' + part for part in ('common', 'core', 'class/hub')]
+if GetDepend('RTANDROIDAUTO_WIRELESS'):
+    src += Glob('../rtcarplay/platform/rtcp_bt_settings.c')
+    zephyr = os.path.join(root, 'packages', 'third-party', 'zephyr-bluetooth')
+    paths += [zephyr + '/include', zephyr + '/porting']
+    realtek = os.path.join(root, 'bsp', 'peripheral', 'wireless', 'realtek')
+    paths += [os.path.join(realtek, part) for part in
+              ('api/wifi', 'api', 'include', 'os/os_dep/include',
+               'platform/include', 'platform/rtwlan_bsp')]
 group = DefineGroup('ProjectionDemo', src, depend=['RTPROJECTION_DEMO'],
                     CPPPATH=paths, LOCAL_CCFLAGS=' -std=c11')
 Return('group')

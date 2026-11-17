@@ -1,7 +1,7 @@
 # Mobility Cockpit / Android Auto development app
 
 `rtprojection` is the independent application for the shared projection demo.
-This checkpoint enables the wired Android Auto backend. CarPlay and CarLife
+The wired profile and a separate wireless development profile enable the Android Auto backend. CarPlay and CarLife
 cards are disabled in this app; switching those protocols in the same firmware
 is future work. The existing `rtcarplay` application remains available.
 There is no separate `rtandroidauto` app or defconfig.
@@ -20,6 +20,9 @@ The image is in `output/d21x_demo128-nand_rt-thread_rtprojection/images/`.
 Its product filename retains the existing board pack's `carplay` name.
 Build the corresponding baremetal bootloader first if its board pack is absent.
 
+The wireless-only build is documented in [WIRELESS.md](WIRELESS.md). It reuses
+the same UI and media backend, with no USB AOA transport in that image.
+
 ## Shared UI ownership
 
 `../rtcarplay/ui/demo_dashboard.c` contains the existing launcher dashboard,
@@ -29,7 +32,7 @@ Both the original `lvgl_launcher.c` and the shared `demo_ui.c` call
 of the home screen. Dashboard values are explicitly simulated.
 
 `demo_ui.h` defines a protocol-neutral callback interface. `app/projection_demo.c`
-adapts Android Auto to it; `backends/androidauto/` owns USB, session, video and
+adapts Android Auto to it; `backends/androidauto/` owns USB, wireless bootstrap/TCP, session, video and
 audio integration. The UI does not include either receiver SDK's headers.
 Display, RTC, backlight and volume adapters are shared with the existing app.
 
@@ -112,15 +115,15 @@ simulated by these stubs.
 ## Validation and remaining work
 
 Software checkpoint: 2026-11-17. SDK gitlink:
-`bc83e2c0762ddb2f96bf28a9ab2a98bb58f7d3b5`.
+`cf145978610a5783ab4524d08f0fcd1d8ed0c7de`.
 Its Windows and Linux CI passed:
-https://github.com/boa-z/rt-androidauto/actions/runs/44081425601
+https://github.com/boa-z/rt-androidauto/actions/runs/44087861014
 
 This SDK adds navigation focus, voice/battery notifications, call availability
 output, legacy service close/reopen, fragmented microphone TX, multiple TLS
 records per AAP fragment, configurable 32-key/rotary input and sensor scheduler
-callbacks. Its independent protobuf oracle checks 27 fixtures; Windows and Linux
-ASan/UBSan tests pass 5/5. See the SDK's `docs/wired-extensions.md` for exact scope.
+callbacks. Its independent protobuf oracle checks 34 fixtures; Windows and Linux
+ASan/UBSan tests pass 6/6. See the SDK's `docs/wired-extensions.md` for exact scope.
 The demo grants projected navigation focus because it has no native navigator;
 adding native navigation requires a real arbitration policy. The dashboard is
 unchanged. The optional media-info channel now receives phone playback status
@@ -149,6 +152,8 @@ ceiling does not imply full modern protocol support or phone compatibility.
   `validation.json` records results and the Android Auto ELF/image hashes.
 
 Android phone, D213 board, USB DMA/cache behavior, audio quality and Google DHU
-acceptance are **NOT_RUN**. Wireless Android Auto, microphone capture, AEC,
-same-image CarPlay/Android Auto switching and hardware acceptance remain open.
+acceptance are **NOT_RUN**. The wireless development path is described in
+[WIRELESS.md](WIRELESS.md), including its explicit HFP/version-negotiation gaps.
+Microphone capture, AEC, same-image CarPlay/Android Auto switching and hardware
+acceptance remain open.
 This is a development integration, not a declaration of phone compatibility.

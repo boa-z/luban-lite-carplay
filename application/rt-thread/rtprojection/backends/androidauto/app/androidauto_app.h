@@ -6,7 +6,7 @@
 #include "rtaa/receiver.h"
 typedef struct
 {
-    bool armed, usb, video, fusion;
+    bool armed, usb, video, fusion, wireless;
     rtaa_state state;
     int error;
     uint32_t attempts;

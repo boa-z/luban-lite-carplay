@@ -4,6 +4,7 @@
  */
 #include "androidauto_platform.h"
 #include <rtthread.h>
+#ifdef RTANDROIDAUTO_USB
 #include <rthw.h>
 #include <stdatomic.h>
 #include "usbh_core.h"
@@ -310,3 +311,13 @@ bool androidauto_usb_present(void)
 {
     return usb.present;
 }
+#else
+int androidauto_usb_open(rtaa_transport *out, uint32_t *generation)
+{
+    (void)out;
+    (void)generation;
+    return RTAA_ENOTSUP;
+}
+uint32_t androidauto_usb_generation(void) { return 0; }
+bool androidauto_usb_present(void) { return false; }
+#endif

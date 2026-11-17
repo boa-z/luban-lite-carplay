@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "androidauto_app.h"
 #include "androidauto_platform.h"
+#include "androidauto_wireless.h"
 #include <rtthread.h>
 #include <rthw.h>
 #include <stdio.h>
@@ -14,6 +15,7 @@ typedef struct
 } touch;
 static atomic_bool armed, fusion, input_lost;
 static atomic_bool retired;
+static atomic_bool wireless_link;
 static atomic_uint requests;
 static rt_mq_t inputs;
 static rt_thread_t worker;
@@ -76,6 +78,7 @@ static void publish(rtaa_receiver *r, unsigned attempts, int error, bool applied
     androidauto_status next = {0};
     next.armed = armed;
     next.usb = androidauto_usb_present();
+    next.wireless = wireless_link;
     next.video = androidauto_media_presented();
     next.fusion = applied_fusion;
     next.attempts = attempts;
@@ -92,7 +95,7 @@ static int create_receiver(rtaa_receiver **out, uint32_t *generation, bool mode)
     *out = NULL;
     if (!androidauto_media_retired())
         return RTAA_ESTATE;
-    int rc = credentials();
+    int rc = certificate_size && key_size ? 0 : credentials();
     if (rc)
         return rc;
     rtaa_receiver_config c = {0};
@@ -131,7 +134,8 @@ static int create_receiver(rtaa_receiver **out, uint32_t *generation, bool mode)
     c.session_timeout_ms = 5000;
     c.heartbeat_ms = 1000;
     c.memory_limit = 2 * 1024 * 1024;
-    rc = androidauto_usb_open(&c.transport, generation);
+    rc = wireless_link ? androidauto_wireless_open(&c.transport, generation)
+                       : androidauto_usb_open(&c.transport, generation);
     if (rc)
         return rc;
     rc = rtaa_receiver_create(&c, out);
@@ -160,7 +164,7 @@ static void run(void *unused)
             retry_at = now;
         }
         bool changed = r && (mode != fusion || !armed || input_lost ||
-                             generation != androidauto_usb_generation());
+                             (!wireless_link && generation != androidauto_usb_generation()));
         if (changed)
         {
             if (rtaa_receiver_state(r) == RTAA_CONNECTED && rtaa_receiver_shutdown(r) == RTAA_OK)
@@ -193,9 +197,15 @@ static void run(void *unused)
             if (cleanup)
                 error = cleanup;
         }
+        if (!r && !armed)
+        {
+            if (!androidauto_wireless_retired())
+                androidauto_wireless_stop();
+            erase_credentials();
+        }
         bool available = !r && androidauto_media_retired();
-        if (!r && armed && androidauto_usb_present() && attempts < 3 && available &&
-            (int32_t)(now - retry_at) >= 0)
+        if (!r && armed && (wireless_link || androidauto_usb_present()) && attempts < 3 &&
+            available && (int32_t)(now - retry_at) >= 0)
         {
             retired = false;
             mode = fusion;
@@ -210,7 +220,7 @@ static void run(void *unused)
                 rtaa_receiver_destroy(r);
                 r = NULL;
             }
-            if (!r)
+            if (!r && error != RTAA_AGAIN)
                 erase_credentials();
             if (error == RTAA_AGAIN)
             {
@@ -219,7 +229,7 @@ static void run(void *unused)
             }
             else if (error && error != RTAA_EIO && error != RTAA_ETIMEOUT)
                 armed = false;
-            retry_at = now + (1000u << attempts);
+            retry_at = now + (wireless_link && !r && !error ? 20 : (1000u << attempts));
         }
         if (r)
         {
@@ -264,11 +274,12 @@ static void run(void *unused)
                 retry_at = now + (1000u << attempts);
             }
         }
-        if (!androidauto_usb_present() && !r)
+        if (!wireless_link && !androidauto_usb_present() && !r)
             attempts = 0;
         publish(r, attempts, error, mode);
         rt_base_t flags = rt_hw_interrupt_disable();
-        retired = !armed && requests == seen_request && !r && androidauto_media_retired();
+        retired = !armed && requests == seen_request && !r && androidauto_media_retired() &&
+                  androidauto_wireless_retired();
         rt_hw_interrupt_enable(flags);
         rt_thread_mdelay(5);
     }
@@ -277,6 +288,9 @@ int androidauto_app_init(void)
 {
     if (worker)
         return 0;
+#ifdef RTANDROIDAUTO_WIRELESS_DEFAULT
+    wireless_link = true;
+#endif
     inputs = rt_mq_create("aa-input", sizeof(touch), 32, RT_IPC_FLAG_FIFO);
     if (!inputs)
         return RTAA_EBOUNDS;
@@ -363,3 +377,32 @@ static int command(int argc, char **argv)
 #endif
 }
 MSH_CMD_EXPORT_ALIAS(command, androidauto, Android Auto receiver owner);
+static int link_command(int argc, char **argv)
+{
+    if (argc == 2 && !strcmp(argv[1], "status"))
+    {
+        rt_kprintf("AA transport=%s; change only after androidauto stop retires\n",
+                   wireless_link ? "wireless" : "usb");
+        return 0;
+    }
+    if (argc != 2 || (strcmp(argv[1], "usb") && strcmp(argv[1], "wireless")))
+        return -1;
+#ifndef RTANDROIDAUTO_WIRELESS
+    if (!strcmp(argv[1], "wireless"))
+        return RTAA_ENOTSUP;
+#endif
+#ifndef RTANDROIDAUTO_USB
+    if (!strcmp(argv[1], "usb"))
+        return RTAA_ENOTSUP;
+#endif
+    rt_base_t flags = rt_hw_interrupt_disable();
+    if (!retired || armed)
+    {
+        rt_hw_interrupt_enable(flags);
+        return RTAA_ESTATE;
+    }
+    wireless_link = !strcmp(argv[1], "wireless");
+    rt_hw_interrupt_enable(flags);
+    return 0;
+}
+MSH_CMD_EXPORT_ALIAS(link_command, androidauto_link, Select USB or wireless while stopped);

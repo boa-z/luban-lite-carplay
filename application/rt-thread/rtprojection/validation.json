@@ -1,18 +1,24 @@
 {
   "date": "2026-11-17",
-  "sdk_commit": "bc83e2c0762ddb2f96bf28a9ab2a98bb58f7d3b5",
+  "sdk_commit": "cf145978610a5783ab4524d08f0fcd1d8ed0c7de",
   "checks": {
-    "androidauto_firmware": "PASS",
-    "sdk_windows_ctest": "PASS 5/5",
-    "sdk_linux_asan_ubsan": "PASS 5/5",
+    "androidauto_firmware": "PASS original wired profile",
+    "sdk_windows_ctest": "PASS 6/6",
+    "sdk_linux_asan_ubsan": "PASS 6/6",
     "sdk_rtthread_d213_archive": "PASS",
-    "upstream_protobuf_fixtures": "PASS 27/27",
+    "upstream_protobuf_fixtures": "PASS 34/34",
     "phone": "NOT_RUN",
     "board": "NOT_RUN",
     "dhu": "NOT_RUN",
-    "shared_configuration_restore": "PASS 7/7 byte comparisons",
+    "shared_configuration_restore": "PASS all 7 files restored byte-for-byte after wired and wireless builds",
     "navigation_phone_snapshot_windows": "PASS maximum text capacity, borrowed-buffer expiry, snapshot relocation, reset",
-    "navigation_phone_snapshot_linux_asan_ubsan": "PASS maximum text capacity, borrowed-buffer expiry, snapshot relocation, reset"
+    "navigation_phone_snapshot_linux_asan_ubsan": "PASS maximum text capacity, borrowed-buffer expiry, snapshot relocation, reset",
+    "androidauto_wireless_firmware": "PASS wireless-only profile, USB AOA adapter disabled",
+    "wireless_platform_linux_asan_ubsan": "PASS production network adapter with real POSIX TCP and mocked WLAN/BT APIs; 32 KiB duplex, restart, cancel/close, pending stop, timeout, partial AP-start cleanup, AP-stop retry, foreign AP preservation, RFCOMM close before TCP, tick wrap, invalid provisioning",
+    "bluetooth_radio_pairing_bonds": "NOT_RUN",
+    "wifi_radio_dhcp": "NOT_RUN",
+    "wireless_phone_aap_tls": "NOT_RUN",
+    "hfp": "NOT_IMPLEMENTED"
   },
   "prior_ui_checkpoint": {
     "product_commit": "35b57bfe7a34bca802fbdb7d264074dfe61106b2",
@@ -28,25 +34,44 @@
   },
   "artifacts": {
     "d21x.elf": {
-      "size": 28495872,
-      "sha256": "b7a001a576b2a7a5cd0e6d792ea985aa58cb6a43829679c8e0951e933585ccc3"
+      "path": "output/d21x_demo128-nand_rt-thread_rtprojection/images/d21x.elf",
+      "size": 28505640,
+      "sha256": "5636fa746464bba6c7d2af3d967c583d837ddbdf3f0934771fbf756beff5bcda"
     },
     "d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img": {
+      "path": "output/d21x_demo128-nand_rt-thread_rtprojection/images/d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img",
       "size": 3979776,
-      "sha256": "a8aac4407eb5538c190c8a125e118b3b535d94d1fde0a4dcce300ee7bf9ffc44"
+      "sha256": "129cbd22e3186e888a04213e282a403d033a070a786bf20c61065962f032ae9b"
     }
   },
-  "scope": "Bounded semantic navigation and phone status services, explicit navigation start/stop and phone cluster input API; deep-copied latest updates and console query; UI unchanged",
+  "scope": "Wireless Dongle-profile RFCOMM bootstrap, AA SDP/EIR, explicit authenticated numeric pairing and shared persistent bond storage, provisioned WPA2 5GHz SoftAP/DHCP, bounded TCP transport into existing pinned AAP/TLS receiver; separate wireless-only defconfig; shared UI unchanged; genuine HFP and modern wireless negotiation remain unsupported",
   "sdk_ci": {
-    "url": "https://github.com/boa-z/rt-androidauto/actions/runs/44081425601",
+    "url": "https://github.com/boa-z/rt-androidauto/actions/runs/44087861014",
     "result": "PASS Windows/Linux"
   },
-  "build_log": "output/androidauto-integration/navigation-phone-build.log",
+  "build_log": "output/androidauto-integration/d21x_demo128-nand_rt-thread_rtprojection-build-final.log",
   "limitations": [
+    "Wireless bootstrap uses explicit Dongle profile; modern version/setup messages 4/5/11 unsupported",
+    "No genuine HFP hands-free/call-audio integration; some phones may not initiate wireless setup without it",
+    "No automatic outbound bonded-peer paging",
+    "Bluetooth radio, numeric pairing, persistent bonds, Wi-Fi radio/DHCP and real wireless AAP/TLS NOT_RUN",
     "Navigation legacy 0x8005 and energy forecast 0x8008 unsupported",
     "Contact photos and navigation icon bytes skipped",
-    "No HFP call audio or verified dial/answer/hangup API",
-    "No wireless bootstrap or microphone capture",
+    "No microphone capture/AEC or verified dial/answer/hangup API",
     "Phone, board and DHU acceptance NOT_RUN"
-  ]
+  ],
+  "wireless_artifacts": {
+    "d21x.elf": {
+      "path": "output/d21x_demo128-nand_rt-thread_rtprojection_wireless/images/d21x.elf",
+      "size": 32114528,
+      "sha256": "297bc4837699f85488c4695ebb37930bf820b65ab9e1378e9357ed722b13654f"
+    },
+    "d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img": {
+      "path": "output/d21x_demo128-nand_rt-thread_rtprojection_wireless/images/d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img",
+      "size": 4332032,
+      "sha256": "6465ee89e1d8b4006d826047c4f58dace320069d519d57558ef1dd9ac3e2caed"
+    }
+  },
+  "wireless_build_log": "output/androidauto-integration/d21x_demo128-nand_rt-thread_rtprojection_wireless-build-final.log",
+  "wireless_defconfig": "target/configs/d21x_demo128-nand_rt-thread_rtprojection_wireless_defconfig"
 }

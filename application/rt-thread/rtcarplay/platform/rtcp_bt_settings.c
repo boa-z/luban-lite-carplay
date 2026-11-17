@@ -37,7 +37,20 @@
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/iterable_sections.h>
 
+#ifdef RTANDROIDAUTO_WIRELESS
+/* The storage engine is shared platform code; AA has no rt-carplay runtime
+ * dependency and keeps its bonds in a separate provisioned namespace. */
+#define LOG_TAG "aa-bt-settings"
+#include <ulog.h>
+#define RTCP_LOGW(tag, ...) LOG_W(__VA_ARGS__)
+#define RTCP_LOGE(tag, ...) LOG_E(__VA_ARGS__)
+#define RTCP_LOGI(tag, ...) LOG_I(__VA_ARGS__)
+#define SETTINGS_FILE "/data/androidauto/bt_settings.bin"
+#define SETTINGS_FILE_TMP "/data/androidauto/bt_settings.bin.tmp"
+#define SETTINGS_FILE_BAK "/data/androidauto/bt_settings.bin.bak"
+#else
 #include "rtcp/log.h"
+#endif
 
 #define TAG "bt-settings"
 
