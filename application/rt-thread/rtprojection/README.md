@@ -73,17 +73,53 @@ video/audio stop retains resources for cleanup rather than freeing memory
 still potentially owned by DMA. Session retries are bounded; security and
 protocol errors require an explicit restart after correction.
 
+## Navigation and phone status
+
+`androidauto_info` displays the most recent navigation and phone status updates.
+The app advertises separate semantic-navigation and phone-status services. Its
+worker starts the navigation subscription once that channel opens, and starts
+again after channel reopen. This diagnostic consumer retains real incoming
+updates; it does not draw another dashboard or claim a graphical cluster UI.
+
+The adapter deep-copies all strings from the SDK's borrowed views, preserving
+optional fields, lane/road/destination data, required call fields and int64 time.
+Console snapshots rebase their own pointers and remain valid if the session
+closes while printing. Channel retirement clears the associated live cache.
+
+The SDK exposes explicit phone cluster input, but the demo does not send call
+actions automatically or claim working HFP call audio. Contact photos and legacy
+navigation icons are skipped. Legacy navigation 0x8005 and energy forecast
+0x8008 remain unsupported. See `docs/navigation-phone.md` in the SDK for exact
+bounds, directions and reference evidence.
+
+A host ownership test compiles the production adapter with explicit RT-Thread
+stubs. From the project root with GCC:
+
+```sh
+gcc -std=c11 -Wall -Wextra -Werror \
+  -Iapplication/rt-thread/rtprojection/tests/status_host \
+  -Ipackages/third-party/rt-androidauto/include \
+  application/rt-thread/rtprojection/tests/test_androidauto_status.c \
+  -o test_androidauto_status
+./test_androidauto_status
+```
+
+Linux additionally uses `-fsanitize=address,undefined -fno-omit-frame-pointer`.
+The test checks maximum text capacity, borrowed-buffer expiry, snapshot
+relocation and reset. IRQ timing, scheduling and hardware behavior are not
+simulated by these stubs.
+
 ## Validation and remaining work
 
 Software checkpoint: 2026-11-17. SDK gitlink:
-`b2240011bad7cffd7e336d67800b22796c9727b4`.
+`bc83e2c0762ddb2f96bf28a9ab2a98bb58f7d3b5`.
 Its Windows and Linux CI passed:
-https://github.com/boa-z/rt-androidauto/actions/runs/44066708129
+https://github.com/boa-z/rt-androidauto/actions/runs/44081425601
 
 This SDK adds navigation focus, voice/battery notifications, call availability
 output, legacy service close/reopen, fragmented microphone TX, multiple TLS
 records per AAP fragment, configurable 32-key/rotary input and sensor scheduler
-callbacks. Its independent protobuf oracle checks 17 fixtures; Windows and Linux
+callbacks. Its independent protobuf oracle checks 27 fixtures; Windows and Linux
 ASan/UBSan tests pass 5/5. See the SDK's `docs/wired-extensions.md` for exact scope.
 The demo grants projected navigation focus because it has no native navigator;
 adding native navigation requires a real arbitration policy. The dashboard is

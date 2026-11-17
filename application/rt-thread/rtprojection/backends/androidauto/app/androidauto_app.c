@@ -121,6 +121,8 @@ static int create_receiver(rtaa_receiver **out, uint32_t *generation, bool mode)
     c.channels[RTAA_INPUT] = (rtaa_channel_config){9, 4096};
     c.channels[RTAA_SENSOR] = (rtaa_channel_config){11, 4096};
     c.channels[RTAA_MEDIA_INFO] = (rtaa_channel_config){13, 32768};
+    c.channels[RTAA_NAVIGATION] = (rtaa_channel_config){15, 32768};
+    c.channels[RTAA_PHONE] = (rtaa_channel_config){17, 32768};
     /* Mic stays unadvertised until a bounded capture/AEC adapter exists. */
     c.name = "Luban-Lite Android Auto";
     c.manufacturer = "boa-z";
@@ -222,6 +224,15 @@ static void run(void *unused)
         if (r)
         {
             int rc = rtaa_receiver_poll(r);
+            if (rc >= 0 && rtaa_receiver_state(r) == RTAA_CONNECTED)
+            {
+                /* The diagnostic consumer is ready before discovery. Retry
+                 * until this optional service opens; repeat starts are local
+                 * no-ops, and a close/reopen requires a fresh start. */
+                int nav = rtaa_receiver_navigation(r, true);
+                if (nav != RTAA_ESTATE && nav < 0)
+                    rc = nav;
+            }
             touch point;
             while (rc >= 0 && rt_mq_recv(inputs, &point, sizeof(point), 0) == RT_EOK)
             {

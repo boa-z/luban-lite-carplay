@@ -488,6 +488,7 @@ rtaa_sink androidauto_media_sink(void)
     sink.video_focus = video_focus;
     sink.navigation_focus = navigation_focus;
     androidauto_media_info_bind(&sink);
+    androidauto_status_info_bind(&sink);
     return sink;
 }
 bool androidauto_media_retired(void)

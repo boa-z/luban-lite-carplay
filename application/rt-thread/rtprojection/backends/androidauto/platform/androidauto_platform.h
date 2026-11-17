@@ -10,6 +10,7 @@ bool androidauto_usb_present(void);
 int androidauto_random(void *, unsigned char *, size_t);
 rtaa_sink androidauto_media_sink(void);
 void androidauto_media_info_bind(rtaa_sink *);
+void androidauto_status_info_bind(rtaa_sink *);
 bool androidauto_media_retired(void);
 int androidauto_media_retire(void);
 int androidauto_media_error(void);
