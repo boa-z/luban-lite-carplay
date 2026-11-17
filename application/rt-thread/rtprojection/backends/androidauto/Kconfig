@@ -2,6 +2,15 @@
 source "packages/third-party/rt-androidauto/Kconfig"
 
 menu "Android Auto backend"
+config RTANDROIDAUTO_PROTOCOL_MINOR
+    int "Requested AAP 1.x minor version ceiling"
+    default 1
+    range 1 7
+    help
+      Keep 1 for the conservative development profile. A higher ceiling
+      permits lower-version negotiation but does not enable every optional
+      service or establish compatibility with that Android Auto version.
+
 config RTANDROIDAUTO_USB
     bool "CherryUSB AOA transport on the dedicated phone host port"
     default y

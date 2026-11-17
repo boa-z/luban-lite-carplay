@@ -96,6 +96,7 @@ static int create_receiver(rtaa_receiver **out, uint32_t *generation, bool mode)
     if (rc)
         return rc;
     rtaa_receiver_config c = {0};
+    c.protocol_minor = RTANDROIDAUTO_PROTOCOL_MINOR;
     c.memory = rtaa_rtthread_allocator();
     c.tls.memory = c.memory;
     c.tls.certificate = certificate;

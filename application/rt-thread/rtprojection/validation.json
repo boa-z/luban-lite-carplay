@@ -1,27 +1,36 @@
 {
   "date": "2026-11-17",
-  "sdk_commit": "23940469a4c685ce9b2f9efee67fe90eb682c35e",
+  "sdk_commit": "06caef022b7e47568201e764c8969ffc61c9a60e",
   "checks": {
     "androidauto_firmware": "PASS",
-    "carplay_shared_ui_firmware": "PASS",
-    "carplay_host_make_check": "PASS",
-    "shared_lvgl_preview": "PASS",
-    "projection_policy": "PASS",
-    "legacy_dashboard_extraction_changed_pixels": 0,
-    "shared_vs_legacy_dashboard_changed_pixels": 23,
-    "shared_vs_legacy_max_channel_difference": 1,
+    "sdk_windows_ctest": "PASS 5/5",
+    "sdk_linux_asan_ubsan": "PASS 5/5",
+    "sdk_rtthread_d213_archive": "PASS",
+    "upstream_protobuf_fixtures": "PASS 14/14",
     "phone": "NOT_RUN",
     "board": "NOT_RUN",
     "dhu": "NOT_RUN"
   },
+  "prior_ui_checkpoint": {
+    "product_commit": "35b57bfe7a34bca802fbdb7d264074dfe61106b2",
+    "results": {
+      "carplay_shared_ui_firmware": "PASS",
+      "carplay_host_make_check": "PASS",
+      "shared_lvgl_preview": "PASS",
+      "projection_policy": "PASS",
+      "legacy_dashboard_extraction_changed_pixels": 0,
+      "shared_vs_legacy_dashboard_changed_pixels": 23,
+      "shared_vs_legacy_max_channel_difference": 1
+    }
+  },
   "artifacts": {
     "d21x.elf": {
-      "size": 28376936,
-      "sha256": "8b1e8307effe34922f0f1a976cb4a98d4848c713b11c30d6a378c6f23271fca4"
+      "size": 28388224,
+      "sha256": "f6b2b0cfce2169fcc02b22a1974fc86b46634f7118059976b2fcd805e597b773"
     },
     "d21x_demo128_nand_carplay_page_2k_block_128k_v1.0.0.img": {
-      "size": 3965440,
-      "sha256": "2ab57b418304400b97ede92815b3749e11e506b3abbe2a0a915a1ba97510304a"
+      "size": 3967488,
+      "sha256": "ae2181c43bc50a3d09930e373da56faf215acb4880ce88837823322609328cb3"
     }
   }
 }

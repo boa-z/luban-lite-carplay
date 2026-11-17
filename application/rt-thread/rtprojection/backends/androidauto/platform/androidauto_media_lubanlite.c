@@ -470,6 +470,14 @@ static int video_focus(void *ctx, bool focused)
     /* This development profile cannot release/reacquire display mid-stream. */
     return focused ? 0 : RTAA_ENOTSUP;
 }
+static int navigation_focus(void *ctx, unsigned requested)
+{
+    (void)ctx;
+    /* This demo has no native navigation owner to preempt. Grant projected
+     * navigation or acknowledge its release; a native navigator must replace
+     * this policy with actual resource arbitration when added. */
+    return (int)requested;
+}
 rtaa_sink androidauto_media_sink(void)
 {
     rtaa_sink sink = {0};
@@ -478,6 +486,7 @@ rtaa_sink androidauto_media_sink(void)
     sink.stop = sink_stop;
     sink.audio_focus = audio_focus;
     sink.video_focus = video_focus;
+    sink.navigation_focus = navigation_focus;
     return sink;
 }
 bool androidauto_media_retired(void)

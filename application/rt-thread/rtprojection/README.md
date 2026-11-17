@@ -76,13 +76,23 @@ protocol errors require an explicit restart after correction.
 ## Validation and remaining work
 
 Software checkpoint: 2026-11-17. SDK gitlink:
-`23940469a4c685ce9b2f9efee67fe90eb682c35e`.
+`06caef022b7e47568201e764c8969ffc61c9a60e`.
 Its Windows and Linux CI passed:
-https://github.com/boa-z/rt-androidauto/actions/runs/44051334693
+https://github.com/boa-z/rt-androidauto/actions/runs/44061601623
+
+This SDK adds navigation focus, voice/battery notifications, call availability
+output, legacy service close/reopen, fragmented microphone TX, multiple TLS
+records per AAP fragment, configurable 32-key/rotary input and sensor scheduler
+callbacks. Its independent protobuf oracle checks 14 fixtures; Windows and Linux
+ASan/UBSan tests pass 5/5. See the SDK's `docs/wired-extensions.md` for exact scope.
+The demo grants projected navigation focus because it has no native navigator;
+adding native navigation requires a real arbitration policy. The dashboard is
+unchanged. `RTANDROIDAUTO_PROTOCOL_MINOR` defaults to 1; a higher negotiation
+ceiling does not imply full modern protocol support or phone compatibility.
 
 - The Android Auto app cross-compiles and packages an ELF and NAND image.
-- The opt-in CarPlay shared UI profile also cross-compiles and packages an
-  image. The existing CarPlay application's complete Host `make check` passes.
+- At the preceding UI integration checkpoint, the opt-in CarPlay shared UI
+  profile packaged an image and the existing CarPlay Host `make check` passed.
 - Real LVGL host checks cover shared UI rendering, backend selection,
   touch capture/release, layout changes and display failure recovery.
 - Policy host checks cover startup cleanup, unsupported selections, contention,
