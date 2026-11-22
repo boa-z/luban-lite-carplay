@@ -74,6 +74,9 @@ CONFIG_RTCARPLAY_MFI=y
 CONFIG_RTCARPLAY_MFI_I2C_BUS="i2c0"
 CONFIG_RTCARPLAY_MFI_I2C_ADDR=0x10
 CONFIG_AIC_USING_TSEN=y
+CONFIG_AIC_USING_GPAI=y
+CONFIG_AIC_USING_GPAI6=y
+CONFIG_AIC_GPAI6_MODE_SINGLE=y
 CONFIG_AIC_DISP_LVDS=y
 CONFIG_AIC_PAN_DISPLAY=y
 CONFIG_AIC_DISP_BLACK_SCREEN=y
@@ -221,6 +224,7 @@ CONFIG_RT_USING_LWIP_IPV6=y
 CONFIG_RTCARPLAY_DIR="../../../packages/third-party/rt-carplay"
 
 CONFIG_RTCARPLAY_DEMO_LAUNCHER=y
+CONFIG_RTCARPLAY_D213_BOARD_KEYS=y
 # The panel presents Classic video and the right-hand local instrument strip
 # on one 1024x600 screen. Settings switches FULLSCREEN (native 1024x600) and
 # FUSION (768x600 video + 256 px strip) by rebuilding the session at runtime.
