@@ -337,6 +337,9 @@ struct aicfb_screeninfo {
 /** get background blend ui config */
 #define AICFB_GET_BG_BLEND_UI_CONFIG _IOR(IOC_TYPE_FB, 0x73, unsigned int)
 
+/** Read the wrapping sequence of the interrupts used by WAIT_FOR_VSYNC. */
+#define AICFB_GET_VSYNC_SEQUENCE _IOR(IOC_TYPE_FB, 0x74, unsigned int)
+
 int aicfb_probe(void);
 int aicfb_ioctl(int cmd, void *args);
 void aicfb_remove(void);

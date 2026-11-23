@@ -163,6 +163,7 @@ struct de_funcs {
     int (*timing_enable)(void);
     int (*timing_disable)(void);
     int (*wait_for_vsync)(void);
+    int (*get_vsync_sequence)(u32 *sequence);
     int (*get_layer_config)(struct aicfb_layer_data *layer_data);
     int (*update_layer_config)(struct aicfb_layer_data *layer_data);
     int (*update_layer_config_list)(struct aicfb_config_lists *list);

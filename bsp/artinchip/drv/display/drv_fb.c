@@ -120,6 +120,13 @@ static int aicfb_ioctl_wait_for_vsync(struct aicfb_info *fbi, void *args)
     return fbi->de->de_funcs->wait_for_vsync();
 }
 
+static int aicfb_ioctl_get_vsync_sequence(struct aicfb_info *fbi, void *args)
+{
+    if (!args || !fbi->de->de_funcs->get_vsync_sequence)
+        return -EINVAL;
+    return fbi->de->de_funcs->get_vsync_sequence(args);
+}
+
 static int aicfb_ioctl_get_screen_register(struct aicfb_info *fbi, void *args)
 {
     if (!fbi->di->di_funcs->read_cmd) {
@@ -303,6 +310,7 @@ struct aicfb_ioctl_cmd {
 
 struct aicfb_ioctl_cmd aicfb_ioctl_cmds[] = {
 {AICFB_WAIT_FOR_VSYNC, aicfb_ioctl_wait_for_vsync, "Wait for vsync"},
+{AICFB_GET_VSYNC_SEQUENCE, aicfb_ioctl_get_vsync_sequence, "Get vsync sequence"},
 {AICFB_PAN_DISPLAY, aicfb_ioctl_pan_display, "Pan display"},
 {AICFB_UPDATE_LAYER_CONFIG, aicfb_ioctl_update_layer_cfg, "Update layer cfg"},
 {AICFB_GET_LAYER_CONFIG, aicfb_ioctl_get_layer_cfg,"Get layer cfg"},

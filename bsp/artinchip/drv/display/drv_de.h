@@ -42,6 +42,7 @@ struct aic_de_comp {
 
     const struct display_timing *timing;
     aicos_wqueue_t vsync_queue;
+    volatile u32 vsync_sequence;
     unsigned int bg_blend_ui_en;
     unsigned int accum_line;
     u32 layer_mask;
