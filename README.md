@@ -2,7 +2,7 @@
 
 本仓库为 [boa-z/luban-lite-carplay](https://github.com/boa-z/luban-lite-carplay)，默认开发分支 `carplay-oss`，上游主线为 [boa-z/luban-lite/master](https://github.com/boa-z/luban-lite/tree/master)。CarPlay 集成已迁出原 `jiachenin/luban-lite-jc` 开发线。
 
-支持 D213 RT-Thread 的 GUI 与 Headless 方案，CI 从本仓库编译裸机 Bootloader 和应用，上传完整 IMG、配置、版本清单与 SHA256。获取、构建和产物使用方法见 [CI 文档](application/rt-thread/rtcarplay/docs/zh-CN/ci.md)（[English](application/rt-thread/rtcarplay/docs/ci.md)）。CI 构建通过与开发板验收分别记录。
+从 [D213 CarPlay 集成指南](application/rt-thread/rtcarplay/README.zh-CN.md)（[English](application/rt-thread/rtcarplay/README.md)）进入构建、模块职责、接入 API、Classic 能力矩阵和板端调试说明。CI 从本仓库构建裸机 Bootloader 和应用，并校验完整 IMG。
 
 CarPlay SDK 与 Apple Ethernet 驱动继续通过子模块独立维护；其各自许可证和第三方声明仍适用。下文保留通用 Luban-Lite SDK 说明。
 
