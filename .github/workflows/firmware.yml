@@ -47,10 +47,9 @@ jobs:
           path: output/host/
   firmware:
     needs: host
-    name: Build and publish preview firmware
+    name: Build and publish nightly firmware
     runs-on: ubuntu-24.04
     timeout-minutes: 50
-    # The workflow's only product is the rolling preview release.
     permissions:
       contents: write
     steps:
@@ -71,43 +70,19 @@ jobs:
         run: bash .ci/build-firmware.sh
       - name: Write release notes
         run: |
+          set -euo pipefail
+          images=(output/ci/*.img)
+          asset=$(basename "${images[0]}")
           cat > output/ci/NOTES.md <<EOF
-          Preview firmware for commit \`${GITHUB_SHA}\`.
+          Nightly firmware for commit \`${GITHUB_SHA}\`. Hardware validation: **NOT_RUN**.
 
-          This is an automatically replaced prerelease: every push to
-          \`carplay-oss\` overwrites the \`preview\` assets below. It has not
-          received the board acceptance listed in
-          [\`media-transport-repair.md\`](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/application/rt-thread/rtcarplay/docs/media-transport-repair.md).
+          Current image: [\`${asset}\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/${asset}).
+          \`SHA256SUMS\` contains the image checksum for manual verification.
 
-          | Asset | Purpose |
-          |---|---|
-          | \`d213-carplay.img\` | Full USB image with the A/B bootloader |
-          | \`ota.cpio\` | A/B OTA package |
-          | \`bootloader.bin\` | A/B bootloader |
-          | \`version.txt\` | Board, version, commit, package size and SHA256 for the update check |
-          | \`SHA256SUMS\` | Asset checksums |
-
-          ## Installing
-
-          1. A device still running a pre-A/B firmware must first flash the
-             \`d213-carplay.img\` over USB. That image contains the A/B
-             bootloader and the env layout; OTA alone cannot switch slots
-             until this one-time migration is done.
-          2. Afterwards, use Settings → System update, or run
-             \`carplay_ota check\`, inspect \`carplay_ota status\`, then
-             explicitly run \`carplay_ota install\` in the console.
-          3. On the device, Settings → System update runs the nightly
-             channel: it compares the commit compiled into the running image
-             with \`commit=\` in \`version.txt\` and reports any difference as an
-             update. Nothing is installed until the on-screen confirmation;
-             the install stages the package in \`/data\`, verifies its size
-             and SHA256, writes the inactive slot and reboots. Disconnect
-             CarPlay before installing and keep power connected.
-          4. \`/data\` is not part of the OTA package: Bluetooth bonds and
-             settings survive an update.
-
-          The board-side download is wired Ethernet (\`e0\`) only. The iPhone
-          USB link (\`n0\`) is not an Internet uplink.
+          Use the image for USB installation to establish A/B baseline 2 and install the direct-image updater.
+          On devices with this updater, paste the image URL into Settings → System update → Firmware URL.
+          Download the image, then confirm installation to write the inactive OS and Rodata pair and reboot.
+          The online update preserves settings and pairings in \`/data\`.
           EOF
 
       - name: Upload development image
@@ -120,32 +95,23 @@ jobs:
           retention-days: 14
       # A [ultra-dev] milestone still builds and uploads the image above, but
       # does not replace the rolling release until it is reviewed.
-      - name: Publish rolling preview release
+      - name: Publish rolling nightly release
         if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[ultra-dev]')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          title="Preview firmware ${GITHUB_SHA:0:8}"
-          if gh release view preview >/dev/null 2>&1; then
-            gh release edit preview --title "$title" --notes-file output/ci/NOTES.md --prerelease
+          title="Nightly firmware ${GITHUB_SHA:0:8}"
+          assets=(output/ci/*.img output/ci/SHA256SUMS output/ci/source-manifest.txt)
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release upload nightly "${assets[@]}" --clobber
+            gh release edit nightly --title "$title" --notes-file output/ci/NOTES.md --prerelease --latest=false
           else
-            gh release create preview --prerelease --target "$GITHUB_SHA" \
+            gh release create nightly "${assets[@]}" --prerelease --latest=false --target "$GITHUB_SHA" \
               --title "$title" --notes-file output/ci/NOTES.md
           fi
-          gh release upload preview \
-            output/ci/d213-carplay.img \
-            output/ci/ota.cpio \
-            output/ci/bootloader.bin \
-            output/ci/SHA256SUMS \
-            output/ci/source-manifest.txt \
-            --clobber
-          # Publish the authorization manifest after the corresponding assets.
-          gh release upload preview output/ci/version.txt --clobber
-          # Keep the rolling tag pointing at this build; the asset URLs do not
-          # change. Best effort: a protected tag still leaves the assets updated.
-          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/preview" \
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" \
             -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1 || true
       - name: Preserve build logs on failure
         if: failure()
