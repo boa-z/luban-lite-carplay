@@ -245,16 +245,18 @@ CONFIG_RT_LWIP_DHCP=y
 CONFIG_RTCARPLAY_INTERNET_SHARE=y
 CONFIG_RTCARPLAY_INTERNET_WAN="e0"
 
-# A/B OTA: the aic-ota package generates images/ota.cpio for release publishing.
+# A/B firmware updates reuse the aic-ota partition writer.
 # AIC_OTA_INTERFACE selects AIC_ENV_INTERFACE and AIC_AB_SYSTEM_INTERFACE.
 CONFIG_LPKG_USING_OTA_DOWNLOADER=y
 CONFIG_AIC_OTA_INTERFACE=y
 CONFIG_AIC_ENV_INTERFACE=y
 CONFIG_AIC_AB_SYSTEM_INTERFACE=y
 
-# Wired OTA: webclient over mbedTLS with the modern root CAs added under
+# Network OTA: WebClient supports HTTP and HTTPS with the root CAs under
 # packages/third-party/mbedtls/certs (github.com and the release CDN).
 CONFIG_LPKG_USING_WEBCLIENT=y
 CONFIG_WEBCLIENT_USING_MBED_TLS=y
 CONFIG_LPKG_USING_MBEDTLS_USER_CERTS=y
 CONFIG_RTCARPLAY_OTA=y
+# CONFIG_NETDEV_USING_AUTO_DEFAULT is not set
+CONFIG_RT_WLAN_PASSWORD_MAX_LENGTH=63

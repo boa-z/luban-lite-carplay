@@ -40,6 +40,19 @@
 #endif
 #define LWIP_RAND rand
 
+#ifdef RTCARPLAY_NETWORK_TIME
+#define SNTP_CHECK_RESPONSE 3
+#define SNTP_STARTUP_DELAY  0
+void carplay_network_time_sample(unsigned int seconds);
+#define SNTP_SET_SYSTEM_TIME(sec) carplay_network_time_sample(sec)
+#define SNTP_GET_SYSTEM_TIME_NTP(sec, frac)             \
+    do                                                 \
+    {                                                  \
+        (sec) = (s32_t)sys_now();                       \
+        (frac) = ((u32_t)rand() << 16) ^ (u32_t)rand();  \
+    } while (0)
+#endif
+
 #ifndef SSIZE_MAX
 #define SSIZE_MAX INT_MAX
 #endif

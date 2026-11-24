@@ -267,6 +267,9 @@ if GetDepend(['RT_LWIP_USING_MQTT']):
 if GetDepend('RTCARPLAY_INTERNET_SHARE'):
     src += ['src/core/ipv4/ip4_napt.c', 'src/core/ipv4/napt_policy.c']
 
+if GetDepend('RTCARPLAY_NETWORK_TIME'):
+    src += lwipsntp_SRCS
+
 mycflags = ' -w'
 group = DefineGroup('lwIP', src, depend = ['RT_USING_LWIP', 'RT_USING_LWIP212'], CPPPATH = path, LOCAL_CFLAGS = mycflags)
 

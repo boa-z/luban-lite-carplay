@@ -33,6 +33,11 @@ bool os_status = 0;
 bool rodatafs_status = 0;
 bool datafs_status = 0;
 
+void aic_reset_upgrade_status(void)
+{
+    os_status = rodatafs_status = datafs_status = false;
+}
+
 void aic_set_upgrade_status(char *file_name)
 {
     if (strncmp("rodata.fatfs", file_name, 12) == 0) {
@@ -74,7 +79,7 @@ int aic_ota_status_update(void)
             goto aic_get_upgrade_status_err;
         }
 
-        fw_env_flush();
+        ret = fw_env_flush();
     } else if (strncmp(status, "0", 2) == 0) {
         ret = 0;
         goto aic_get_upgrade_status_err;
@@ -96,6 +101,26 @@ int aic_upgrade_end(void)
 
     if (fw_env_open())
         return -1;
+
+    const char *baseline = fw_getenv("carplay_ab_baseline");
+    if (baseline && !strcmp(baseline, "2")) {
+        const char *os = fw_getenv("osAB_now");
+        const char *rodata = fw_getenv("rodataAB_now");
+        const char *pending = fw_getenv("upgrade_available");
+        if (!os_status || !rodatafs_status || datafs_status || !pending ||
+            strcmp(pending, "0") || !os || !rodata || strcmp(os, rodata) ||
+            (strcmp(os, "A") && strcmp(os, "B"))) {
+            ret = -1;
+            goto aic_upgrade_end_out;
+        }
+        char confirmed[] = {*os, '\0'};
+        ret = fw_env_write("carplay_confirmed_slot", confirmed);
+        if (ret)
+            goto aic_upgrade_end_out;
+        ret = fw_env_write("carplay_update_result", "trial");
+        if (ret)
+            goto aic_upgrade_end_out;
+    }
 
     /* update os */
     if (os_status) {
@@ -176,7 +201,7 @@ int aic_upgrade_end(void)
         goto aic_upgrade_end_out;
 
     /* flush to flash */
-    fw_env_flush();
+    ret = fw_env_flush();
 
 aic_upgrade_end_out:
 
@@ -300,7 +325,9 @@ int aic_absystem_mount_fs(unsigned int prio)
     const char *fs_type;
 
     if (boot_dev != BD_SDMC0 && boot_dev != BD_SDMC1) {
+#if !defined(RTCARPLAY_OTA)
         aic_ota_status_update();
+#endif
 
         if (prio == 0) {
             aic_get_rodata_to_mount(target);
