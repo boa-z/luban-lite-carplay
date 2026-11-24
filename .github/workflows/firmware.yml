@@ -64,7 +64,7 @@ jobs:
           python3 -m venv .ci-venv
           .ci-venv/bin/pip install -r .ci/requirements.txt
           echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
-      - name: Build Bootloader and complete IMG
+      - name: Build and validate Bootloader, IMG and CPIO
         env:
           PYTHONUNBUFFERED: '1'
         run: bash .ci/build-firmware.sh
@@ -76,16 +76,13 @@ jobs:
           cat > output/ci/NOTES.md <<EOF
           Nightly firmware for commit \`${GITHUB_SHA}\`. Hardware validation: **NOT_RUN**.
 
-          Current image: [\`${asset}\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/${asset}).
-          \`SHA256SUMS\` contains the image checksum for manual verification.
+          - [\`ota.cpio\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/ota.cpio) is the online update package. On devices with the CPIO updater, paste its URL into Settings → System update → Firmware URL. Download it and confirm installation to update the inactive OS and Rodata pair and preserve \`/data\`.
+          - [\`${asset}\`](https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/${asset}) is the full USB installation and recovery image. Devices already on A/B baseline 2 can install this IMG once through their existing IMG updater to migrate to CPIO.
 
-          Use the image for USB installation to establish A/B baseline 2 and install the direct-image updater.
-          On devices with this updater, paste the image URL into Settings → System update → Firmware URL.
-          Download the image, then confirm installation to write the inactive OS and Rodata pair and reboot.
-          The online update preserves settings and pairings in \`/data\`.
+          \`SHA256SUMS\` covers both firmware files and the source manifest.
           EOF
 
-      - name: Upload development image
+      - name: Upload development firmware
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -103,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Nightly firmware ${GITHUB_SHA:0:8}"
-          assets=(output/ci/*.img output/ci/SHA256SUMS output/ci/source-manifest.txt)
+          assets=(output/ci/*.img output/ci/ota.cpio output/ci/SHA256SUMS output/ci/source-manifest.txt)
           if gh release view nightly >/dev/null 2>&1; then
             gh release upload nightly "${assets[@]}" --clobber
             gh release edit nightly --title "$title" --notes-file output/ci/NOTES.md --prerelease --latest=false
@@ -112,7 +109,7 @@ jobs:
               --title "$title" --notes-file output/ci/NOTES.md
           fi
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/nightly" \
-            -f sha="$GITHUB_SHA" -F force=true >/dev/null 2>&1 || true
+            -f sha="$GITHUB_SHA" -F force=true >/dev/null
       - name: Preserve build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

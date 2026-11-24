@@ -18,15 +18,18 @@ scons -j"$jobs" 2>&1 | tee output/ci-logs/firmware-build.log
 python3 .ci/check-wired-profile.py .config "output/${config%_defconfig}/images/d21x.elf" toolchain/bin/riscv64-unknown-elf-nm
 dest=output/ci
 mkdir -p "$dest"
-mapfile -t images < <(find "output/${config%_defconfig}/images" -maxdepth 1 -type f -name '*.img')
+build_images="output/${config%_defconfig}/images"
+archive="$build_images/ota.cpio"
+mapfile -t images < <(find "$build_images" -maxdepth 1 -type f -name '*.img')
 if (( ${#images[@]} != 1 )); then
   echo "Expected one complete IMG, found ${#images[@]}" >&2; exit 1
 fi
-python3 .ci/verify-image.py "${images[0]}"
-python3 application/rt-thread/rtcarplay/tests/run_ota_worker.py "${images[0]}"
+test -s "$archive"
+python3 .ci/verify-image.py "${images[0]}" "$archive"
+python3 application/rt-thread/rtcarplay/tests/run_ota_worker.py "$archive"
 
 asset=$(basename "${images[0]}")
-cp "${images[0]}" "$dest/"
+cp "${images[0]}" "$archive" "$dest/"
 {
   printf 'sdk_commit=%s\n' "$(git rev-parse HEAD)"
   printf 'source_worktree_changes_begin\n'
@@ -39,4 +42,4 @@ cp "${images[0]}" "$dest/"
   toolchain/bin/riscv64-unknown-elf-gcc --version | head -1
   printf 'hardware_validation=NOT_RUN\n'
 } > "$dest/source-manifest.txt"
-(cd "$dest" && sha256sum "$asset" source-manifest.txt > SHA256SUMS)
+(cd "$dest" && sha256sum "$asset" ota.cpio source-manifest.txt > SHA256SUMS)
