@@ -305,7 +305,6 @@ static void wps_config_wifi_setting(rtw_network_info_t *wifi, struct dev_credent
 
 	//memcpy(wifi->password, dev_cred->key, dev_cred->key_len);
 	wifi->password = dev_cred->key;
-	printf("\r\nwps_wifi.password = %s\n", wifi->password);
 	wifi->password_len = dev_cred->key_len;
 	printf("\r\nwps_wifi.password_len = %d", wifi->password_len);
 	//xSemaphoreGive(wps_reconnect_semaphore);
@@ -319,7 +318,6 @@ static int wps_connect_to_AP_by_certificate(rtw_network_info_t *wifi)
 	printf("\r\n=============== wifi_certificate_info ===============\n");
 	printf("\r\nwps_wifi.ssid = %s\n", wifi->ssid.val);
 	printf("\r\nsecurity_type = %d\n", wifi->security_type);
-	printf("\r\nwps_wifi.password = %s\n", wifi->password);
 	printf("\r\nssid_len = %d\n", wifi->ssid.len);
 	printf("\r\npassword_len = %d\n", wifi->password_len);
 	while (1) {

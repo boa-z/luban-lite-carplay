@@ -7,7 +7,7 @@
 #define __RT_REALTEK_API_H__
 
 extern void wlan_recv(int idx, unsigned int len);
-extern void rtw_init_macaddr(char *mac);
+extern void rtw_init_macaddr(int index, const unsigned char *mac);
 extern void rtw_wlan_get_mac(u8 *mac);
 
 #if CONFIG_ENABLE_P2P

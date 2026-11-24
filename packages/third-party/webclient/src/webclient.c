@@ -398,7 +398,7 @@ static int webclient_connect(struct webclient_session *session, const char *URI)
 #elif defined(WEBCLIENT_USING_MBED_TLS)
         if(webclient_open_tls(session, URI) < 0)
         {
-            LOG_E("connect failed, https client open URI(%s) failed!", URI);
+            LOG_E("HTTPS client connection failed");
             return -WEBCLIENT_ERROR;
         }
         session->is_tls = RT_TRUE;
@@ -440,6 +440,7 @@ static int webclient_connect(struct webclient_session *session, const char *URI)
     if (session->tls_session)
     {
         int tls_ret = 0;
+        session->tls_session->outbound_netif = session->outbound_netif;
 
         if ((tls_ret = mbedtls_client_context(session->tls_session)) < 0)
         {
@@ -488,6 +489,24 @@ static int webclient_connect(struct webclient_session *session, const char *URI)
             goto __exit;
         }
 
+        if (session->outbound_netif)
+        {
+            int bind_error = -1;
+#if defined(SO_BINDTODEVICE) && !defined(RT_USING_SAL)
+            struct ifreq binding = {0};
+            if (strlen(session->outbound_netif) < sizeof(binding.ifr_name))
+            {
+                strcpy(binding.ifr_name, session->outbound_netif);
+                bind_error = setsockopt(socket_handle, SOL_SOCKET, SO_BINDTODEVICE, &binding, sizeof(binding));
+            }
+#endif
+            if (bind_error != 0)
+            {
+                closesocket(socket_handle);
+                rc = -WEBCLIENT_CONNECT_FAILED;
+                goto __exit;
+            }
+        }
         /* set receive and send timeout option */
         setsockopt(socket_handle, SOL_SOCKET, SO_RCVTIMEO, (void *) &timeout,
                    sizeof(timeout));
@@ -721,27 +740,6 @@ static int webclient_send_header(struct webclient_session *session, int method)
         }
     }
 
-    /* get and echo request header data */
-    {
-        char *header_str, *header_ptr;
-        int header_line_len;
-        LOG_D("request header:");
-
-        for(header_str = session->header->buffer; (header_ptr = strstr(header_str, "\r\n")) != RT_NULL; )
-        {
-            header_line_len = header_ptr - header_str;
-
-            if (header_line_len > 0)
-            {
-                LOG_D("%.*s", header_line_len, header_str);
-            }
-            header_str = header_ptr + strlen("\r\n");
-        }
-#ifdef WEBCLIENT_DEBUG
-        LOG_RAW("\n");
-#endif
-    }
-
 __exit:
     return rc;
 }
@@ -790,9 +788,6 @@ int webclient_handle_response(struct webclient_session *session)
 
         /* set terminal charater */
         mime_buffer[rc - 1] = '\0';
-
-        /* echo response header data */
-        LOG_D("%s", mime_buffer);
 
         session->header->length += rc;
 
@@ -920,10 +915,9 @@ static int webclient_clean(struct webclient_session *session);
  * @return <0: send GET request failed
  *         >0: response http status code
  */
-int webclient_get(struct webclient_session *session, const char *URI)
+int webclient_get_once(struct webclient_session *session, const char *URI)
 {
-    int rc = WEBCLIENT_OK;
-    int resp_status = 0;
+    int rc;
 
     RT_ASSERT(session);
     RT_ASSERT(URI);
@@ -942,10 +936,13 @@ int webclient_get(struct webclient_session *session, const char *URI)
        return rc;
     }
 
-    /* handle the response header of webclient server */
-    resp_status = webclient_handle_response(session);
+    return webclient_handle_response(session);
+}
 
-    LOG_D("get position handle response(%d).", resp_status);
+int webclient_get(struct webclient_session *session, const char *URI)
+{
+    int rc;
+    int resp_status = webclient_get_once(session, URI);
 
     if (resp_status > 0)
     {

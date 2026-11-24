@@ -244,6 +244,7 @@ int wifi_set_mac_address(char * mac);
  * @return    RTW_SUCCESS or RTW_ERROR
  */
 int wifi_get_mac_address(char * mac);
+const char *wifi_ap_interface_name(void);
 
 int bt_set_mac_address(char *mac);
 

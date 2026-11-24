@@ -53,7 +53,7 @@ void rltk_wlan_set_netif_info(int idx_wlan, void * dev, unsigned char * dev_addr
 	rtw_memcpy(xnetif[idx_wlan].hwaddr, dev_addr, 6);
 	xnetif[idx_wlan].state = dev;
 #else
-	rtw_init_macaddr(dev_addr);
+	rtw_init_macaddr(idx_wlan, dev_addr);
 #endif
 }
 

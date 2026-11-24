@@ -198,7 +198,7 @@ rt_err_t rt_wlan_prot_attach_dev(struct rt_wlan_device *wlan, const char *prot_n
         }
     }
 
-    if (i >= RT_WLAN_PROT_MAX)
+    if (i >= RT_WLAN_PROT_MAX || wlan->prot == RT_NULL)
     {
         LOG_E("F:%s L:%d not find wlan protocol", __FUNCTION__, __LINE__);
         return -RT_ERROR;

@@ -665,9 +665,6 @@ static void rt_wlan_complete_delete(struct rt_wlan_complete_des *complete)
     rt_free(complete);
 }
 
-#if defined(RT_WLAN_PROT_ENABLE) && defined(RT_WLAN_DEFAULT_PROT)
-static struct rt_wlan_device *g_wlan_device = NULL;
-#endif
 rt_err_t rt_wlan_set_mode(const char *dev_name, rt_wlan_mode_t mode)
 {
     rt_device_t device = RT_NULL;
@@ -702,26 +699,17 @@ rt_err_t rt_wlan_set_mode(const char *dev_name, rt_wlan_mode_t mode)
         if (err != RT_EOK)
         {
             LOG_E("L:%d wlan config mode failed", __LINE__);
+            MGNT_UNLOCK();
             return -RT_ERROR;
         }
 #if defined(RT_WLAN_PROT_ENABLE) && defined(RT_WLAN_DEFAULT_PROT)
-        if ((g_wlan_device != NULL) && (g_wlan_device != device)) {
-            rt_wlan_prot_detach_dev(g_wlan_device);
-            g_wlan_device = (void *)device;
-            rt_wlan_prot_attach_dev((void *)device, RT_WLAN_DEFAULT_PROT);
-        }
+        if (mode != RT_WLAN_NONE && RT_WLAN_DEVICE(device)->prot == RT_NULL)
+            err = rt_wlan_prot_attach_dev(RT_WLAN_DEVICE(device), RT_WLAN_DEFAULT_PROT);
 #endif
         RT_WLAN_LOG_D("L:%d this device mode is set", mode);
         MGNT_UNLOCK();
-        return RT_EOK;
+        return err;
     }
-
-#if defined(RT_WLAN_PROT_ENABLE) && defined(RT_WLAN_DEFAULT_PROT)
-    if (g_wlan_device != NULL)
-        rt_wlan_prot_detach_dev(g_wlan_device);
-
-    g_wlan_device = (void *)device;
-#endif
 
     if ((mode == RT_WLAN_STATION) &&
             (RT_WLAN_DEVICE(device)->flags & RT_WLAN_FLAG_AP_ONLY))
@@ -828,15 +816,13 @@ rt_err_t rt_wlan_set_mode(const char *dev_name, rt_wlan_mode_t mode)
             }
         }
     }
-    MGNT_UNLOCK();
-
-    /* Mount protocol */
 #if defined(RT_WLAN_PROT_ENABLE) && defined(RT_WLAN_DEFAULT_PROT)
-    if (err == RT_EOK)
-    {
-        rt_wlan_prot_attach(dev_name, RT_WLAN_DEFAULT_PROT);
-    }
+    if (mode == RT_WLAN_NONE)
+        err = rt_wlan_prot_detach_dev(RT_WLAN_DEVICE(device));
+    else
+        err = rt_wlan_prot_attach_dev(RT_WLAN_DEVICE(device), RT_WLAN_DEFAULT_PROT);
 #endif
+    MGNT_UNLOCK();
     return err;
 }
 
@@ -919,7 +905,7 @@ rt_err_t rt_wlan_connect(const char *ssid, const char *password)
     {
         return -RT_EIO;
     }
-    RT_WLAN_LOG_D("%s is run ssid:%s password:%s", __FUNCTION__, ssid, password);
+    RT_WLAN_LOG_D("%s", __FUNCTION__);
     if (ssid == RT_NULL)
     {
         RT_WLAN_LOG_E("ssid is null!");
@@ -1020,14 +1006,14 @@ rt_err_t rt_wlan_connect_adv(struct rt_wlan_info *info, const char *password)
         RT_WLAN_LOG_E("info is null!");
         return -RT_EINVAL;
     }
-    RT_WLAN_LOG_D("%s is run ssid:%s password:%s", __FUNCTION__, info->ssid.val, password);
+    RT_WLAN_LOG_D("%s", __FUNCTION__);
     /* Parameter checking */
     if (password != RT_NULL)
     {
         password_len = rt_strlen(password);
         if (password_len > RT_WLAN_PASSWORD_MAX_LENGTH)
         {
-            RT_WLAN_LOG_E("password is to long! password:%s len:%d", password, password_len);
+            RT_WLAN_LOG_E("WLAN password exceeds supported length");
             return -RT_EINVAL;
         }
     }
@@ -1256,7 +1242,7 @@ rt_err_t rt_wlan_start_ap(const char *ssid, const char *password)
     if (ssid == RT_NULL) return -RT_EINVAL;
 
     rt_memset(&info, 0, sizeof(struct rt_wlan_info));
-    RT_WLAN_LOG_D("%s is run ssid:%s password:%s", __FUNCTION__, ssid, password);
+    RT_WLAN_LOG_D("%s", __FUNCTION__);
     if (password)
     {
         info.security = SECURITY_WPA2_AES_PSK;

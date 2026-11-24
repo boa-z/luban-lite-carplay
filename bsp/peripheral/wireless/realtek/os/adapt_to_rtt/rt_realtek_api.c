@@ -32,8 +32,14 @@
 
 static struct rt_wlan_device *s_wlan_dev = NULL;
 static struct rt_wlan_device *s_ap_dev = NULL;
-static struct rt_wlan_device *s_current_dev = NULL;
-static char rtw_mac[6];
+static struct rt_wlan_device *s_rx_device[2];
+static char rtw_mac[2][6];
+extern rtw_mode_t wifi_mode;
+
+static int wlan_index(struct rt_wlan_device *wlan)
+{
+    return wlan == s_ap_dev && wifi_mode == RTW_MODE_STA_AP ? 1 : 0;
+}
 
 extern int realtek_init(void);
 #ifdef RT_USING_PM
@@ -88,7 +94,8 @@ rt_err_t aic_realtek_set_mode(struct rt_wlan_device *wlan, rt_wlan_mode_t mode)
 {
     if(mode == RT_WLAN_AP) {
         if (!wifi_is_up(RTW_AP_INTERFACE)) {
-            wifi_off();
+            if (wifi_is_up(RTW_STA_INTERFACE))
+                return -EBUSY;
             aicos_msleep(100);
             if (wifi_on(RTW_MODE_AP) < 0) {
                 pr_err("WIFI mode AP start Failed\n");
@@ -97,19 +104,25 @@ rt_err_t aic_realtek_set_mode(struct rt_wlan_device *wlan, rt_wlan_mode_t mode)
 #if defined(CONFIG_ENABLE_WPS_AP) && CONFIG_ENABLE_WPS_AP
             wpas_wps_dev_config(xnetif[0].hwaddr, 1);
 #endif
-            s_current_dev = s_ap_dev;
         }
+        s_rx_device[wlan_index(wlan)] = s_ap_dev;
     } else if (mode == RT_WLAN_STATION) {
         if (!wifi_is_up(RTW_STA_INTERFACE)) {
-            wifi_off();
+            if (wifi_is_up(RTW_AP_INTERFACE))
+                return -EBUSY;
             aicos_msleep(100);
             if (wifi_on(RTW_MODE_STA) < 0)
                 return -EIO;
         }
-        s_current_dev = s_wlan_dev;
+        s_rx_device[0] = s_wlan_dev;
     } else {
+        int index = wlan_index(wlan);
+        if (s_rx_device[index] != wlan)
+            return 0;
+        if (wifi_mode == RTW_MODE_STA_AP)
+            return -EBUSY;
         wifi_off();
-        s_current_dev = NULL;
+        s_rx_device[index] = NULL;
     }
 
     return 0;
@@ -144,15 +157,16 @@ static rtw_result_t _scan_result_handler( rtw_scan_handler_result_t* malloced_sc
 
     if (malloced_scan_result->scan_complete != RTW_TRUE) {
         rtw_scan_result_t* record = &malloced_scan_result->ap_details;
-        record->SSID.val[record->SSID.len] = 0; /* Ensure the SSID is null terminated */
-
-        memset(&info, 0, sizeof(struct rt_scan_info));
+        if (record->SSID.len > RT_WLAN_SSID_MAX_LENGTH)
+            return RTW_SUCCESS;
+        memset(&info, 0, sizeof(info));
         info.security = _security_rtw_2_rtt(record->security);
         info.band = record->band;
         info.datarate = 0;
         info.channel = record->channel;
         info.rssi = record->signal_strength;
-        memcpy(&info.ssid, &record->SSID, sizeof(rt_wlan_ssid_t));
+        info.ssid.len = record->SSID.len;
+        memcpy(info.ssid.val, record->SSID.val, info.ssid.len);
         memcpy(&info.bssid, record->BSSID.octet, 6);
         info.hidden = 0;
 
@@ -182,7 +196,7 @@ rt_err_t aic_realtek_join(struct rt_wlan_device *wlan, struct rt_sta_info *sta_i
 
     if (sta_info->key.len == 0)
         sta_info->security = SECURITY_OPEN;
-    else
+    else if (sta_info->security == SECURITY_UNKNOWN)
         sta_info->security = SECURITY_WPA_AES_PSK;
 
     ret = wifi_connect(sta_info->ssid.val,
@@ -204,6 +218,8 @@ rt_err_t aic_realtek_join(struct rt_wlan_device *wlan, struct rt_sta_info *sta_i
 
 static void indicate_ap_associated(char *buf, int buf_len, int flags, void* handler_user_data)
 {
+    if (!buf || buf_len < 16)
+        return;
     struct rt_wlan_buff buff;
     struct rt_wlan_info sta_info = {0};
 
@@ -215,6 +231,8 @@ static void indicate_ap_associated(char *buf, int buf_len, int flags, void* hand
 
 static void indicate_ap_disassociated(char *buf, int buf_len, int flags, void* handler_user_data)
 {
+    if (!buf || buf_len < 6)
+        return;
     struct rt_wlan_buff buff;
     struct rt_wlan_info sta_info = {0};
 
@@ -227,13 +245,9 @@ static void indicate_ap_disassociated(char *buf, int buf_len, int flags, void* h
 rt_err_t aic_realtek_softap(struct rt_wlan_device *wlan, struct rt_ap_info *ap_info)
 {
     if (!wifi_is_up(RTW_AP_INTERFACE)) {
-        wifi_off();
-        aicos_msleep(20);
-        aicos_msleep(100);
-        if (wifi_on(RTW_MODE_AP) < 0) {
-            pr_err("WIFI mode AP start Failed\n");
-            return -EIO;
-        }
+        int result = aic_realtek_set_mode(wlan, RT_WLAN_AP);
+        if (result)
+            return result;
     }
 
     wifi_reg_event_handler(WIFI_EVENT_STA_ASSOC, indicate_ap_associated, NULL);
@@ -246,6 +260,8 @@ rt_err_t aic_realtek_softap(struct rt_wlan_device *wlan, struct rt_ap_info *ap_i
                     ap_info->key.len,
                     ap_info->channel
                     ) != RTW_SUCCESS) {
+        wifi_unreg_event_handler(WIFI_EVENT_STA_ASSOC, indicate_ap_associated);
+        wifi_unreg_event_handler(WIFI_EVENT_STA_DISASSOC, indicate_ap_disassociated);
         pr_info("ERROR: Operation failed!\n");
         return -EIO;
     }
@@ -264,7 +280,7 @@ void rtw_wlan_p2p_go_started(void)
         return;
 
     p2p_go_active = 1;
-    s_current_dev = s_ap_dev;
+    s_rx_device[wlan_index(s_ap_dev)] = s_ap_dev;
 
     wifi_reg_event_handler(WIFI_EVENT_STA_ASSOC, indicate_ap_associated, NULL);
     wifi_reg_event_handler(WIFI_EVENT_STA_DISASSOC, indicate_ap_disassociated, NULL);
@@ -279,7 +295,7 @@ void rtw_wlan_p2p_go_stopped(void)
         wifi_unreg_event_handler(WIFI_EVENT_STA_ASSOC, indicate_ap_associated);
         wifi_unreg_event_handler(WIFI_EVENT_STA_DISASSOC, indicate_ap_disassociated);
         p2p_go_active = 0;
-        s_current_dev = NULL;
+        s_rx_device[wlan_index(s_ap_dev)] = NULL;
         rt_wlan_dev_indicate_event_handle(s_ap_dev, RT_WLAN_DEV_EVT_AP_STOP, NULL);
     }
 }
@@ -327,7 +343,10 @@ rt_err_t aic_realtek_disconnect(struct rt_wlan_device *wlan)
 rt_err_t aic_realtek_ap_stop(struct rt_wlan_device *wlan)
 {
     if (wifi_is_up(RTW_AP_INTERFACE)) {
+        if (wifi_mode == RTW_MODE_STA_AP)
+            return -EBUSY;
         wifi_off();
+        s_rx_device[0] = NULL;
     }
 
     wifi_unreg_event_handler(WIFI_EVENT_STA_ASSOC, indicate_ap_associated);
@@ -340,7 +359,7 @@ rt_err_t aic_realtek_ap_stop(struct rt_wlan_device *wlan)
 
 rt_err_t aic_realtek_ap_deauth(struct rt_wlan_device *wlan, unsigned char mac[])
 {
-    return wext_del_station(WLAN0_NAME, mac);
+    return wext_del_station(wlan_index(wlan) ? WLAN1_NAME : WLAN0_NAME, mac);
 }
 
 rt_err_t aic_realtek_scan_stop(struct rt_wlan_device *wlan)
@@ -384,19 +403,20 @@ rt_err_t aic_realtek_set_mac(struct rt_wlan_device *wlan, rt_uint8_t *mac)
     return wifi_set_mac_address(mac);
 }
 
-void rtw_init_macaddr(char *mac)
+void rtw_init_macaddr(int index, const unsigned char *mac)
 {
-    memcpy(rtw_mac, mac, 6);
+    if (index >= 0 && index < 2)
+        memcpy(rtw_mac[index], mac, 6);
 }
 
 void rtw_wlan_get_mac(u8 *mac)
 {
-    memcpy(mac, rtw_mac, 6);
+    memcpy(mac, rtw_mac[0], 6);
 }
 
 rt_err_t aic_realtek_get_mac(struct rt_wlan_device *wlan, rt_uint8_t *mac)
 {
-    memcpy(mac, rtw_mac, 6);
+    memcpy(mac, rtw_mac[wlan_index(wlan)], 6);
     return 0;
 }
 
@@ -413,7 +433,8 @@ int aic_realtek_send(struct rt_wlan_device *wlan, void *buff, int len)
     struct pbuf *p = buff;
     struct pbuf *q;
 
-    if(!rltk_wlan_running(0))
+    int index = wlan_index(wlan);
+    if (s_rx_device[index] != wlan || !rltk_wlan_running(index))
         return ERR_IF;
 
     /* packet is stored in one list composed by several pbuf. */
@@ -422,26 +443,23 @@ int aic_realtek_send(struct rt_wlan_device *wlan, void *buff, int len)
         sg_list[sg_len++].len = q->len;
     }
 
-    if (sg_len)
-        rltk_wlan_send(0, sg_list, sg_len, p->tot_len);
-
-    return ERR_OK;
+    if (!sg_len || q)
+        return ERR_BUF;
+    return rltk_wlan_send(index, sg_list, sg_len, p->tot_len) ? ERR_IF : ERR_OK;
 }
 
 void wlan_recv(int idx, unsigned int len)
 {
-    int errcode;
-
     struct eth_drv_sg sg_list[MAX_ETH_DRV_SG];
     struct pbuf *p, *q;
     int sg_len = 0;
 
     /* WIFI chip is running */
-    if(!rltk_wlan_running(idx))
+    if (idx < 0 || idx >= 2 || !rltk_wlan_running(idx))
         return;
-
-    if ((len > MAX_ETH_MSG) || (len < 0))
-        len = MAX_ETH_MSG;
+    struct rt_wlan_device *wlan = s_rx_device[idx];
+    if (!wlan || !len || len > MAX_ETH_MSG)
+        return;
 
     /* Allocate buffer to store received packet */
     p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
@@ -455,11 +473,15 @@ void wlan_recv(int idx, unsigned int len)
         sg_list[sg_len].buf = (unsigned int) q->payload;
         sg_list[sg_len++].len = q->len;
     }
+    if (q) {
+        pbuf_free(p);
+        return;
+    }
 
     /* Copy received packet to scatter list from wrapper RX skb */
     rltk_wlan_recv(idx, sg_list, sg_len);
 
-    if (rt_wlan_dev_report_data(s_current_dev, p, p->len)) {
+    if (rt_wlan_dev_report_data(wlan, p, p->len)) {
         rt_kprintf("if[%d] input pkt fail\n",idx);
         pbuf_free(p);
     }
@@ -486,6 +508,7 @@ const struct rt_wlan_dev_ops wlan_ops = {
     .wlan_send = aic_realtek_send,
 };
 
+#ifndef RTCARPLAY_OTA
 #define WLAN_CFG_FILE "/data/wlan_cfg"
 
 static int read_cfg(void *buff, int len)
@@ -553,6 +576,7 @@ int aic_realtek_wifi_cfg(void)
 }
 
 INIT_LATE_APP_EXPORT(aic_realtek_wifi_cfg);
+#endif
 
 int aic_realtek_wifi_device_reg(void)
 {
