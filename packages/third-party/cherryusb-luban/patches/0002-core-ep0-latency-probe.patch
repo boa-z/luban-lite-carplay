@@ -1,0 +1,58 @@
+--- a/core/usbh_core.c
++++ b/core/usbh_core.c
+@@ -702,8 +702,9 @@
+     usbh_class_info_table_begin = (struct usbh_class_info *)__section_begin(".usbh_class_info");
+     usbh_class_info_table_end = (struct usbh_class_info *)__section_end(".usbh_class_info");
+ #endif
+-    usbh_hub_initialize(bus);
+-    return 0;
++    int ret = usbh_hub_initialize(bus);
++    if (ret < 0) usb_slist_remove(&g_bus_head, &bus->list);
++    return ret;
+ }
+ 
+ int usbh_deinitialize(uint8_t busid)
+@@ -724,6 +725,13 @@
+     return 0;
+ }
+ 
++#ifdef CONFIG_USBHOST_CONTROL_PROBE
++extern uint32_t usbh_control_probe_now_ms(void) __attribute__((weak));
++extern void usbh_control_probe_record(struct usbh_hubport *, uint8_t,
++                                      uint32_t, uint32_t) __attribute__((weak));
++#endif
++
++
+ int usbh_control_transfer(struct usbh_hubport *hport, struct usb_setup_packet *setup, uint8_t *buffer)
+ {
+     struct usbh_urb *urb;
+@@ -740,7 +748,14 @@
+ 
+     urb = &hport->ep0_urb;
+ 
++#ifdef CONFIG_USBHOST_CONTROL_PROBE
++    bool probe = usbh_control_probe_now_ms && usbh_control_probe_record;
++    uint32_t probe_start = probe ? usbh_control_probe_now_ms() : 0;
++#endif
+     usb_osal_mutex_take(hport->mutex);
++#ifdef CONFIG_USBHOST_CONTROL_PROBE
++    uint32_t probe_locked = probe ? usbh_control_probe_now_ms() : 0;
++#endif
+ 
+     usbh_print_setup(setup);
+ 
+@@ -764,7 +779,14 @@
+         }
+     }
+ 
++#ifdef CONFIG_USBHOST_CONTROL_PROBE
++    uint32_t probe_end = probe ? usbh_control_probe_now_ms() : 0;
++#endif
+     usb_osal_mutex_give(hport->mutex);
++#ifdef CONFIG_USBHOST_CONTROL_PROBE
++    if (probe) usbh_control_probe_record(hport, setup->bRequest,
++        probe_locked - probe_start, probe_end - probe_locked);
++#endif
+     return ret;
+ }
+ 

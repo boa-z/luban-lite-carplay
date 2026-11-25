@@ -1,0 +1,18 @@
+--- a/osal/usb_osal_rtthread.c
++++ b/osal/usb_osal_rtthread.c
+@@ -111,11 +111,15 @@
+ 
+ int usb_osal_mutex_take(usb_osal_mutex_t mutex)
+ {
++    if (mutex == NULL)
++        return -USB_ERR_INVAL;
+     return (int)rt_mutex_take((rt_mutex_t)mutex, RT_WAITING_FOREVER);
+ }
+ 
+ int usb_osal_mutex_give(usb_osal_mutex_t mutex)
+ {
++    if (mutex == NULL)
++        return -USB_ERR_INVAL;
+     return (int)rt_mutex_release((rt_mutex_t)mutex);
+ }
+ 
