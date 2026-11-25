@@ -91,6 +91,13 @@
     #define LV_FS_POSIX_CACHE_SIZE 0    /*>0 to cache this number of bytes in lv_fs_read()*/
 #endif
 
+#if defined(RTCARPLAY_DEMO_LAUNCHER)
+#define LV_USE_LODEPNG 1
+#define LV_USE_TJPGD 1
+#define LV_USE_FS_MEMFS 1
+#define LV_FS_MEMFS_LETTER 'M'
+#endif
+
 #if defined(AIC_LVGL_MUSIC_DEMO)
 #define LV_USE_DEMO_MUSIC 1
 #endif

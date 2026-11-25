@@ -43,14 +43,15 @@ static irqreturn_t aic_de_handler(int irq, void *ctx)
     de_timing_interrupt_clean_status(comp->regs, status);
 
 #ifdef AIC_DE_DRV_V11_1
-    if (status & TIMING_INIT_CFG_DONE_STATUS)
-        aicos_wqueue_wakeup(comp->vsync_queue);
+    if (status & TIMING_INIT_CFG_DONE_STATUS) {
+#else
+    if (status & TIMING_INIT_V_BLANK_FLAG) {
 #endif
+        ++comp->vsync_sequence;
+        aicos_wqueue_wakeup(comp->vsync_queue);
+    }
 
     if (status & TIMING_INIT_V_BLANK_FLAG) {
-#ifndef AIC_DE_DRV_V11_1
-        aicos_wqueue_wakeup(comp->vsync_queue);
-#endif
         if (comp->cb)
             comp->cb(comp->cb_data);
     }
@@ -393,6 +394,15 @@ static int aic_de_wait_for_vsync(void)
             hal_log_err("DE wait vsync irq failed, ret: %d\n", ret);
             return ret;
     }
+    return 0;
+}
+
+static int aic_de_get_vsync_sequence(u32 *sequence)
+{
+    struct aic_de_comp *comp = aic_de_request_drvdata();
+
+    *sequence = comp->vsync_sequence;
+    aic_de_release_drvdata();
     return 0;
 }
 
@@ -747,6 +757,7 @@ struct de_funcs aic_de_funcs   = {
     .timing_enable             = aic_de_timing_enable,
     .timing_disable            = aic_de_timing_disable,
     .wait_for_vsync            = aic_de_wait_for_vsync,
+    .get_vsync_sequence       = aic_de_get_vsync_sequence,
     .get_alpha_config          = aic_de_get_alpha_config,
     .update_alpha_config       = aic_de_update_alpha_config,
     .get_ck_config             = aic_de_get_ck_config,
