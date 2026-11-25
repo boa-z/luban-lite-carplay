@@ -19,7 +19,7 @@
 | Mbed TLS / WebClient | [Mbed TLS](https://github.com/Mbed-TLS/mbedtls) 2.28.1 与 [WebClient](https://github.com/RT-Thread-packages/webclient)，Apache-2.0。SDK 基线固定二者源码，WebClient 原始导入没有精确上游 SHA。 | 保留 Receiver 的 2.x ABI、厂商加速、OTA TLS 校验和接口绑定。已核对 WebClient 最新标签 `2.2.0`，升级需覆盖这些契约。 |
 | Zephyr Bluetooth | [Zephyr](https://github.com/zephyrproject-rtos/zephyr) SDK 快照标记 4.4.0，保留 Apache-2.0 和文件级许可证声明。 | 保留 RT-Thread 适配、RTL8733BS H:5、D40 H:4 和各自板级固件。`v4.5.0` 作为独立移植候选。 |
 | LVGL / MPP / BSP | SDK 的 [LVGL](https://github.com/lvgl/lvgl) 8.3.1 与 9.1.0（MIT）；ArtInChip MPP 和 BSP 依据原厂文件声明。 | 保留显示、触摸、GE、Cache/DMA 和解码路径。`v9.6.0` 升级需单独验证 ABI、渲染和性能。 |
-| 独立依赖 | Receiver `c5c0df7`、Demo `68814a2`（GPL-3.0 系列，详见各仓许可证），ipheth `867537f`（Apache-2.0 及 BSD 派生部分）。 | 以 Gitlink 的完整 SHA 为准，独立更新及验证。 |
+| 独立依赖 | Receiver 与 Demo（GPL-3.0 系列，详见各仓许可证），ipheth（Apache-2.0 及 BSD 派生部分）。 | `git submodule status` 列出固定提交。集成 CI 使用 clang-format 23.1.1 检查实际集成的 Receiver 和 Demo。 |
 
 厂商未记录精确的原始上游 SHA 时，以 SDK 基线固定源码版本。
 

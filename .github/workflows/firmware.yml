@@ -22,6 +22,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           submodules: recursive
+      - name: Check integrated Receiver and Demo formatting
+        run: |
+          python3 -m venv .ci-venv
+          .ci-venv/bin/pip install clang-format==23.1.1
+          export PATH="$PWD/.ci-venv/bin:$PATH"
+          formatter=packages/third-party/rt-carplay/scripts/format-code.py
+          python3 "$formatter" --check
+          python3 "$formatter" --root application/rt-thread/rt-carplay-demo --check
       - name: Prepare pinned mbedTLS host source
         run: sh packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
       - name: Test SDK integration
