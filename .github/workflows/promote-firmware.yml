@@ -1,0 +1,36 @@
+name: Promote verified firmware
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful all-target Firmware build run ID
+        required: true
+        type: string
+      channel:
+        description: Release channel
+        type: choice
+        options: [nightly, stable]
+        required: true
+      evidence:
+        description: JSON mapping target IDs to {status, img_sha256, url} from board tests
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: firmware-release
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/carplay'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify and promote original artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+          CHANNEL: ${{ inputs.channel }}
+          EVIDENCE: ${{ inputs.evidence }}
+        run: python3 .ci/promote-firmware.py "$RUN_ID" "$CHANNEL" "$EVIDENCE"

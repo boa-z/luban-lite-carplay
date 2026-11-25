@@ -1,0 +1,60 @@
+{
+  "d213-demo128-nand-carplay-rtl8733bs": {
+    "soc": "d213",
+    "platform": "d21x",
+    "board": "demo128-nand-carplay",
+    "storage": "spi-nand-page-2k-block-128k",
+    "module": "RTL8733BS",
+    "driver": "realtek",
+    "capabilities": ["wifi-ap", "wifi-sta", "bluetooth-br-edr"],
+    "features": ["wired-carplay", "wireless-carplay", "internet-sharing", "ab-ota"],
+    "defconfig": "d21x_demo128-nand_rt-thread_rt-carplay-demo_rtl8733bs_defconfig",
+    "boot_defconfig": "d21x_demo128-nand-carplay_baremetal_bootloader_defconfig",
+    "partition_layout": "target/d21x/demo128-nand-carplay/pack/image_cfg.json",
+    "toolchain_prefix": "toolchain/bin/riscv64-unknown-elf-",
+    "checks": ["native-ncm"],
+    "required_config": {
+      "AIC_WLAN_REALTEK": "y",
+      "AIC_WLAN_AIC8800": "n",
+      "LPKG_BT_CLASSIC": "y",
+      "LPKG_BT_H5": "y",
+      "RT_LWIP_MDNS": "y",
+      "RT_WLAN_PROT_LWIP_PBUF_FORCE": "y",
+      "PRJ_IMAGE_VARIANT": "\"rtl8733bs\""
+    },
+    "ota": {"compat": "demo128-nand-carplay", "baseline": 2, "legacy_alias": true}
+  },
+  "d213-demo128-nand-carplay-aic8800d40": {
+    "soc": "d213",
+    "platform": "d21x",
+    "board": "demo128-nand-carplay",
+    "storage": "spi-nand-page-2k-block-128k",
+    "module": "AIC8800D40",
+    "driver": "aic8800-d80-sdio",
+    "capabilities": ["wifi-ap", "wifi-sta", "bluetooth-br-edr"],
+    "features": ["wired-carplay", "wireless-carplay", "ab-ota"],
+    "defconfig": "d21x_demo128-nand_rt-thread_rt-carplay-demo_aic8800d40_defconfig",
+    "boot_defconfig": "d21x_demo128-nand-carplay_baremetal_bootloader_defconfig",
+    "partition_layout": "target/d21x/demo128-nand-carplay/pack/image_cfg.json",
+    "toolchain_prefix": "toolchain/bin/riscv64-unknown-elf-",
+    "checks": ["native-ncm"],
+    "required_config": {
+      "AIC_WLAN_AIC8800D40": "y",
+      "AIC_WLAN_AIC8800D40L": "n",
+      "AIC_WLAN_REALTEK": "n",
+      "CHIP_SELECT_AIC8800D40": "y",
+      "LPKG_ZEPHYR_BLUETOOTH_CHIPSET_AIC8800D40": "y",
+      "LPKG_BT_CLASSIC": "y",
+      "LPKG_BT_H4": "y",
+      "RT_LWIP_MDNS": "y",
+      "AIC_SDMC2_BUSWIDTH4": "y",
+      "AIC_SDMC2_CLK_FREQ": "40000000",
+      "RT_WLAN_PROT_LWIP_PBUF_FORCE": "n",
+      "CONFIG_AIC8800_BT_SUPPORT": "y",
+      "AIC8800_AP_VENDOR_IE": "y",
+      "LPKG_RT_CARPLAY_LUBANLITE_WIFI": "y",
+      "PRJ_IMAGE_VARIANT": "\"aic8800d40\""
+    },
+    "ota": {"compat": "d213-demo128-nand-carplay-aic8800d40", "baseline": 2}
+  }
+}

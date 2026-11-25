@@ -1,0 +1,81 @@
+name: Firmware build
+on:
+  push:
+    branches: [carplay]
+  pull_request:
+    branches: [carplay]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Hardware target ID or all
+        default: all
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  sdk-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - name: Prepare pinned mbedTLS host source
+        run: sh packages/third-party/rt-carplay/scripts/fetch-mbedtls.sh
+      - name: Test SDK integration
+        run: bash .ci/test-sdk.sh
+  targets:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.registry.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - id: registry
+        env:
+          REQUESTED_TARGET: ${{ inputs.target || 'all' }}
+        run: |
+          matrix=$(python3 .ci/hardware_targets.py matrix "$REQUESTED_TARGET")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+  firmware:
+    name: Firmware (${{ matrix.target }})
+    needs: targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    env:
+      HARDWARE_TARGET: ${{ matrix.target }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          lfs: true
+          submodules: recursive
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake patch dosfstools mtools device-tree-compiler u-boot-tools cpio
+          python3 -m venv .ci-venv
+          .ci-venv/bin/pip install -r .ci/requirements.txt
+          echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
+      - name: Build bootloader and firmware
+        run: bash .ci/build-firmware.sh "$HARDWARE_TARGET" build
+      - name: Validate firmware and assemble artifact
+        run: bash .ci/build-firmware.sh "$HARDWARE_TARGET" verify
+      - name: Upload verified firmware
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: firmware-${{ matrix.target }}-${{ github.sha }}
+          path: output/ci/${{ matrix.target }}/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Preserve build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: build-failure-logs-${{ matrix.target }}-${{ github.sha }}
+          path: output/ci-logs/${{ matrix.target }}/
+          if-no-files-found: ignore
