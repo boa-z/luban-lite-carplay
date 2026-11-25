@@ -1,0 +1,3 @@
+[submodule "packages/third-party/cherryusb"]
+	path = packages/third-party/cherryusb
+	url = https://github.com/boa-z/CherryUSB.git
