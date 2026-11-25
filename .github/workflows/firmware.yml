@@ -1,7 +1,7 @@
 name: D213 firmware
 on:
   push:
-    branches: [carplay-oss]
+    branches: [carplay-oss, codex/rt-carplay-demo-migration]
   pull_request:
     branches: [carplay-oss]
   workflow_dispatch:
