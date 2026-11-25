@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 void aic_set_upgrade_status(char *file_name);
+void aic_reset_upgrade_status(void);
 int aic_ota_status_update(void);
 int aic_upgrade_end(void);
 int aic_get_rodata_to_mount(char *target_rodata);

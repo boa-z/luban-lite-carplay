@@ -24,14 +24,25 @@ int aic_ota_version_fallback(void)
     char *next = NULL;
 
     next = fw_getenv("osAB_next");
+    const char *baseline = fw_getenv("carplay_ab_baseline");
+    if (baseline && !strcmp(baseline, "2")) {
+        const char *confirmed = fw_getenv("carplay_confirmed_slot");
+        if (!confirmed || (strcmp(confirmed, "A") && strcmp(confirmed, "B")))
+            return -1;
+        char slot[] = {*confirmed, '\0'};
+        if (fw_env_write("osAB_next", slot) || fw_env_write("rodataAB_next", slot) ||
+            fw_env_write("carplay_update_result", "boot-limit"))
+            return -1;
+        goto reset_trial;
+    }
 #ifdef AIC_ENV_DEBUG
     printf("osAB_next = %s\n", next);
 #endif
 
     /*Version fallback*/
-    if (strncmp(next, "A", 2) == 0) {
+    if (next && strncmp(next, "A", 2) == 0) {
         ret = fw_env_write("osAB_next", "B");
-    } else if (strncmp(next, "B", 2) == 0) {
+    } else if (next && strncmp(next, "B", 2) == 0) {
         ret = fw_env_write("osAB_next", "A");
     } else {
         pr_err("Invalid osAB_next\n");
@@ -43,6 +54,7 @@ int aic_ota_version_fallback(void)
         return ret;
     }
 
+reset_trial:
     ret = fw_env_write("bootcount", "0");
     if (ret) {
         pr_err("Env write fail\n");
@@ -76,16 +88,24 @@ int aic_ota_check(void)
 #ifdef AIC_ENV_DEBUG
     printf("upgrade_available = %s\n", status);
 #endif
-    if (strncmp(status, "1", 2) == 0) {
+    if (status && strncmp(status, "1", 2) == 0) {
         str = fw_getenv("bootlimit");
+        if (!str) {
+            ret = -1;
+            goto aic_set_upgrade_status_err;
+        }
         limit = strtol(str, NULL, 10);
 
         str = fw_getenv("bootcount");
+        if (!str) {
+            ret = -1;
+            goto aic_set_upgrade_status_err;
+        }
         count = strtol(str, NULL, 10);
 #ifdef AIC_ENV_DEBUG
         printf("limit = %d, count =%d\n", limit, count);
 #endif
-        if (limit < count) {
+        if (limit <= count) {
             pr_warn(
                 "The number of boot failed exceeds the limit, Version fallback now\n");
 
@@ -105,8 +125,8 @@ int aic_ota_check(void)
             }
         }
 
-        fw_env_flush();
-    } else if (strncmp(status, "0", 2) == 0) {
+        ret = fw_env_flush();
+    } else if (status && strncmp(status, "0", 2) == 0) {
         ret = 0;
     } else {
         pr_err("Invalid upgrade_available\n");
@@ -199,7 +219,7 @@ int aic_get_os_to_startup(char *target_os)
     }
 
 
-    fw_env_flush();
+    ret = fw_env_flush();
 
 err_write_next_os:
     fw_env_close();

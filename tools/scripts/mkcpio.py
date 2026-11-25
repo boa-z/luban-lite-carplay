@@ -45,15 +45,27 @@ def generate_version(cfgfile):
     return head_str
 
 
-def modify_ota_cfg(cfgfile):
+def write_ota_cfg(cfgfile, output):
 
-    with open(cfgfile, "r") as f:
-        lines = f.readlines()
+    # Binary mode keeps the file LF-only on Windows. Text mode would rewrite
+    # every line as CRLF and leave this tracked config dirty after each build.
+    with open(cfgfile, "rb") as f:
+        lines = f.read().replace(b'\r\n', b'\n').splitlines(True)
 
     if lines:
-        lines[2] = generate_version(aic_pack_dir + '/image_cfg.json')
+        lines[2] = generate_version(aic_pack_dir + '/image_cfg.json').encode('utf-8')
 
-    with open(cfgfile, "w") as f:
+    with open(os.path.join(aic_root, '.config'), 'rb') as f:
+        config = f.read()
+    compat = re.search(br'^CONFIG_RTCARPLAY_OTA_COMPAT="([a-z0-9-]+)"\r?$', config, re.M)
+    if b'CONFIG_RTCARPLAY_OTA=y' in config:
+        board_lines = [index for index, line in enumerate(lines)
+                       if line.startswith(b'board = ')]
+        if compat is None or len(board_lines) != 1:
+            raise ValueError('CarPlay OTA requires one board field and a valid compatibility ID')
+        lines[board_lines[0]] = b'board = "' + compat.group(1) + b'";\n'
+
+    with open(output, "wb") as f:
         f.writelines(lines)
 
 
@@ -174,11 +186,7 @@ default_bin_root = os.path.dirname(sys.argv[0])
 if sys.platform.startswith("win"):
     default_bin_root = os.path.dirname(sys.argv[0]) + "/"
 
-# update the version
-modify_ota_cfg(aic_pack_dir + '/ota-subimgs.cfg')
-
-# copy to the output dir
-os.system('cp ' + aic_pack_dir + '/ota-subimgs.cfg ' + prj_out_dir)
+write_ota_cfg(os.path.join(aic_pack_dir, 'ota-subimgs.cfg'), 'ota-subimgs.cfg')
 
 # generate the ota-subimgs.cfg to binary file
 generate_cpio_bin(prj_out_dir, '/ota-subimgs.cfg', default_bin_root)
