@@ -4,3 +4,6 @@
 [submodule "packages/third-party/cherryusb-ipheth"]
 	path = packages/third-party/cherryusb-ipheth
 	url = https://github.com/boa-z/cherryusb-ipheth.git
+[submodule "application/rt-thread/rtcarplay"]
+	path = application/rt-thread/rtcarplay
+	url = https://github.com/boa-z/rt-carplay-demo.git

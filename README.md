@@ -2,7 +2,7 @@
 
 本仓库为 [boa-z/luban-lite-carplay](https://github.com/boa-z/luban-lite-carplay)，默认开发分支 `carplay-oss`，上游主线为 [boa-z/luban-lite/master](https://github.com/boa-z/luban-lite/tree/master)。CarPlay 集成已迁出原 `jiachenin/luban-lite-jc` 开发线。
 
-从 [D213 CarPlay 集成指南](application/rt-thread/rtcarplay/README.zh-CN.md)（[English](application/rt-thread/rtcarplay/README.md)）进入构建、模块职责、接入 API、Classic 能力矩阵和板端调试说明。CI 从本仓库构建裸机 Bootloader 和应用，并校验完整 IMG。
+从 [D213 CarPlay 集成指南](https://github.com/boa-z/rt-carplay-demo/blob/main/README.zh-CN.md)（[English](https://github.com/boa-z/rt-carplay-demo)）查看构建、模块职责和上板验收。使用 `git submodule update --init --recursive` 初始化固定提交的 Demo、Receiver SDK 和 USB Ethernet 驱动。本仓库的 CI 构建裸机 Bootloader 和应用，校验 IMG 与 OTA CPIO。
 
 CarPlay SDK 与 Apple Ethernet 驱动继续通过子模块独立维护；其各自许可证和第三方声明仍适用。下文保留通用 Luban-Lite SDK 说明。
 
@@ -283,7 +283,7 @@ vTaskDelay(100);           // 直接调用 FreeRTOS API
 | [AGENTS.md](AGENTS.md) | AI Agent 入口文档（构建命令、约定、流程） |
 | [CODEMAP.md](CODEMAP.md) | 源码文件地图（精确路径索引） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发流程 Checklist |
-| [application/rt-thread/rtcarplay/README.md](application/rt-thread/rtcarplay/README.md) | CarPlay 接收应用（D213，USB/无线；`rt-carplay` 与 `cherryusb-ipheth` 为 git submodule） |
+| [rt-carplay-demo](https://github.com/boa-z/rt-carplay-demo) | D213 USB 和无线 CarPlay 应用，固定提交检出至 `application/rt-thread/rtcarplay` |
 
 ## 在线文档
 
