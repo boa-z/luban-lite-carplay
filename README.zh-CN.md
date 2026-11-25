@@ -2,6 +2,8 @@ Luban-Lite SDK 是由ArtInChip设计的，旨在为系统级芯片(SoC)设计提
 
 通过这个仓库，匠芯创科技期望与全球开发者共同打造一个功能丰富、易于使用的嵌入式开发生态，推动技术的创新与发展。
 
+CarPlay 目标配置、固件构建、OTA 和发布流程见[固件指南](doc/carplay-firmware.zh-CN.md)。
+
 # 架构与设计介绍
 Luban-Lite SDK的架构设计分为两种主要情况，根据是否使用操作系统(OS)进行区分：
 

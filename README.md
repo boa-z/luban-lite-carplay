@@ -1,4 +1,14 @@
-# Luban-Lite SDK
+# Luban-Lite CarPlay
+
+本仓库为 [boa-z/luban-lite-carplay](https://github.com/boa-z/luban-lite-carplay)，默认开发分支 `carplay`，上游主线为 [boa-z/luban-lite/master](https://github.com/boa-z/luban-lite/tree/master)。CarPlay 集成已迁出原 `jiachenin/luban-lite-jc` 开发线。
+
+从 [D213 CarPlay 集成指南](https://github.com/boa-z/rt-carplay-demo/blob/main/README.zh-CN.md)（[English](https://github.com/boa-z/rt-carplay-demo)）查看构建、模块职责和上板验收。使用 `git submodule update --init --recursive` 初始化固定提交的 Demo、Receiver SDK 和 USB Ethernet 驱动。本仓库的 CI 构建裸机 Bootloader 和应用，校验 IMG 与 OTA CPIO。
+
+CarPlay SDK 与 Apple Ethernet 驱动继续通过子模块独立维护；其各自许可证和第三方声明仍适用。下文保留通用 Luban-Lite SDK 说明。
+
+## 硬件目标与固件
+
+RTL8733BS 和 AIC8800D40 共用 D213 BSP，分别构建 IMG 和 A/B OTA CPIO。目标注册、构建、发布和实机验收见[固件指南](doc/carplay-firmware.zh-CN.md)（[English](doc/carplay-firmware.md)）。
 
 Luban-Lite 是匠芯创(ArtInChip)科技有限公司的嵌入式 RTOS SDK，旨在为 ArtInChip 系列芯片提供完整的软件开发环境。
 
@@ -277,6 +287,7 @@ vTaskDelay(100);           // 直接调用 FreeRTOS API
 | [AGENTS.md](AGENTS.md) | AI Agent 入口文档（构建命令、约定、流程） |
 | [CODEMAP.md](CODEMAP.md) | 源码文件地图（精确路径索引） |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发流程 Checklist |
+| [rt-carplay-demo](https://github.com/boa-z/rt-carplay-demo) | D213 USB 和无线 CarPlay 应用，固定提交检出至 `application/rt-thread/rt-carplay-demo` |
 
 ## 在线文档
 
