@@ -18,6 +18,8 @@
       "AIC_WLAN_AIC8800": "n",
       "LPKG_BT_CLASSIC": "y",
       "LPKG_BT_H5": "y",
+      "RT_USING_LWIP212": "y",
+      "RTCARPLAY_INTERNET_SHARE": "y",
       "RT_LWIP_MDNS": "y",
       "RT_WLAN_PROT_LWIP_PBUF_FORCE": "y",
       "PRJ_IMAGE_VARIANT": "\"rtl8733bs\""
@@ -46,6 +48,7 @@
       "LPKG_ZEPHYR_BLUETOOTH_CHIPSET_AIC8800D40": "y",
       "LPKG_BT_CLASSIC": "y",
       "LPKG_BT_H4": "y",
+      "RTCARPLAY_INTERNET_SHARE": "n",
       "RT_LWIP_MDNS": "y",
       "AIC_SDMC2_BUSWIDTH4": "y",
       "AIC_SDMC2_CLK_FREQ": "40000000",

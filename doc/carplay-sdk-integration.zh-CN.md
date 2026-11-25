@@ -38,7 +38,7 @@
 ## SDK 保留项与回归
 
 - WLAN 保留同步取消、悬挂定时器预防和工作对象生命周期修复。移除 RT-Thread 通用对象追踪、清空对象表的恢复逻辑、失效指针定时器诊断。
-- lwIP 保留可选 NAPT 的输入、转发及接口销毁钩子、DHCP 选项、SNTP 回包检查、队列和套接字配置。转换器及转发策略由 `port/napt/` 单独编译，Demo 测试兼容新旧路径。独立的 `RT_LWIP_MDNS` 控制 mDNS，并限制额外定时器在相关功能启用时分配。
+- lwIP 保留可选 NAPT 的输入、转发及接口销毁钩子、DHCP 选项、SNTP 回包检查、队列和套接字配置。启用 `RTCARPLAY_INTERNET_SHARE` 时，从 BSD-3-Clause 子模块 `packages/third-party/lwip-napt` 编译转换器和转发策略。RTL8733BS 保持 128 条映射且关闭静态端口映射，AIC8800D40 关闭共享功能。Demo 负责上游探测、DHCP/DNS 选项与接口选择。`RT_LWIP_MDNS` 独立控制 mDNS。
 - 无线与蓝牙保留 D40/D40L 选型、AP/STA 和 Vendor IE 适配、Realtek 接收缓冲区所有权、BR/EDR 和设置表。D40L 配置独立验证 WLAN，D40 Classic 仅用于 D40。
 - Mbed TLS 和 WebClient 保留 RV64 MPI、AES-CTR 后端、出口网卡绑定和 TLS 校验。板级 OTA 仍需实测时间、证书及更新服务器。
 - BSP/MPP/LVGL 保留 VSync 计数、H.264 缺失 SPS 处理、GUI 启动和触摸唯一所有者。需要实测 Fusion、音视频和触摸的性能与行为。
@@ -48,3 +48,16 @@
 和 `bash .ci/test-sdk.sh`。双目标构建、增加硬件目标及上板清单参见
 [固件指南](carplay-firmware.zh-CN.md)。可选旧版 USB Display 与 UVC
 需要单独验证官方 CherryUSB 版本兼容性。
+
+### 网络共享
+
+递归初始化子模块后，在 SDK 根目录运行以下命令，使用固定版本的 NAPT 源码执行 Demo 路由和共享管理测试。
+
+```sh
+git submodule update --init --recursive
+cmake -S .ci/internet-share -B build/internet-share -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/internet-share --parallel
+ctest --test-dir build/internet-share --output-on-failure
+```
+
+上板时记录镜像 SHA256、板卡型号和 iPhone/iOS 版本。在 RTL8733BS 上检查有线和无线投屏、音视频及断线重连，并检查 AP/STA、DHCP、DNS、mDNS 和本地路由。接入上游后，使用 `ifconfig`、`internet_share` 和 `carplay_connection status` 观察状态。关闭手机蜂窝数据，通过 WAN 抓包和 NAPT 双向计数确认共享。拔插 WAN 并让上游重新获取地址，验证重新探测后可以恢复。AIC8800D40 保持共享关闭，复测本地通信和投屏。抓包步骤见 [Demo 上板验证](../application/rt-thread/rt-carplay-demo/docs/zh-CN/internet-sharing.md)。

@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.16)
+project(luban_internet_share C)
+
+enable_testing()
+get_filename_component(SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(NAPT_DIR "${SDK_ROOT}/packages/third-party/lwip-napt")
+if(NOT EXISTS "${NAPT_DIR}/src/ip4_napt.c")
+    message(FATAL_ERROR "Run git submodule update --init --recursive from the SDK checkout")
+endif()
+
+add_subdirectory("${SDK_ROOT}/application/rt-thread/rt-carplay-demo/tests/internet_share" demo)
+foreach(test_target IN ITEMS test_internet_route test_internet_supervisor)
+    target_sources(${test_target} PRIVATE "${NAPT_DIR}/src/ip4_napt.c" "${NAPT_DIR}/src/napt_policy.c")
+    target_include_directories(${test_target} PRIVATE "${NAPT_DIR}/include")
+endforeach()

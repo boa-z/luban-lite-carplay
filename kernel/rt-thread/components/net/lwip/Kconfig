@@ -27,6 +27,9 @@ if RT_USING_LWIP
 
         config RT_USING_LWIP212
             bool "lwIP v2.1.2"
+            help
+              CarPlay Internet sharing with this port uses the lwip-napt
+              Git submodule under packages/third-party.
 
         # online version
         if !RT_USING_LWIP_LOCAL_VERSION

@@ -1,11 +1,14 @@
+import os
 from building import *
 
 cwd = GetCurrentDir()
 path  = [cwd]
 
 src  = Glob('*.c')
-if GetDepend(['RT_USING_LWIP212', 'RTCARPLAY_INTERNET_SHARE']):
-    src += Glob('napt/*.c')
+if GetDepend(['RT_USING_LWIP', 'RT_USING_LWIP212', 'RTCARPLAY_INTERNET_SHARE']):
+    napt_script = File('#/packages/third-party/lwip-napt/SConscript').abspath
+    if not os.path.isfile(napt_script):
+        raise RuntimeError('Initialize packages/third-party/lwip-napt with git submodule update --init --recursive')
 
 mycflags = ' -w'
 group = DefineGroup('lwIP', src, depend = ['RT_USING_LWIP'], CPPPATH = path,  LOCAL_CFLAGS = mycflags)

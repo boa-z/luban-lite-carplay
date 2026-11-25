@@ -49,11 +49,12 @@ specific behavior.
   startup and teardown on each radio.
 - **lwIP** retains IP input/forwarding, interface teardown and pbuf hooks for
   the opt-in NAPT path, plus DHCP options, interface routing, queued input,
-  receive budgets, and SNTP response checks. The translator and forwarding
-  policy compile from `port/napt/`. The Demo test supports that layout and
-  the earlier core path. The mDNS responder and extra timers are opt-in for
-  unrelated SDK configurations. Exercise both sharing directions, WAN
-  reconnect, local routing, and time acquisition on the board.
+  receive budgets, and SNTP response checks. `RTCARPLAY_INTERNET_SHARE`
+  builds the translator and forwarding policy from the BSD-3-Clause
+  `packages/third-party/lwip-napt` submodule. The RTL8733BS profile enables
+  sharing with 128 entries and static port mapping disabled. The AIC8800D40
+  profile leaves sharing disabled. The Demo owns WAN probing, DHCP/DNS offers
+  and interface selection. The mDNS responder and extra timers remain opt-in.
 - **Wireless and Bluetooth** retain the D40/D40L firmware selection, API
   adapters for AP/STA and vendor IEs, Realtek receive ownership, H:4/H:5
   transport handling, BR/EDR pairing persistence and settings registration.
@@ -81,3 +82,26 @@ registration and physical validation. The optional legacy USB Display and UVC
 paths need their own compatibility assessment before using them with the
 official snapshot. The D40L WLAN configuration is validated separately from
 the D40 wireless CarPlay profile.
+
+### Internet sharing
+
+From an SDK checkout, run the Demo routing and supervisor regressions against
+the pinned NAPT sources with:
+
+```sh
+git submodule update --init --recursive
+cmake -S .ci/internet-share -B build/internet-share -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/internet-share --parallel
+ctest --test-dir build/internet-share --output-on-failure
+```
+
+For board acceptance, record the image SHA256, board and iPhone/iOS version.
+On RTL8733BS, check wired and wireless projection, audio/video and session
+reconnect. With wireless projection active, check AP and STA connectivity,
+DHCP, DNS, mDNS and local routes. Connect the configured WAN, run `ifconfig`,
+`internet_share` and `carplay_connection status`, and verify a phone request
+with cellular disabled. Confirm both NAPT counters and the WAN capture. Unplug
+and reconnect WAN, then renew its address and check that sharing recovers
+after a fresh probe. Repeat local connectivity and projection on AIC8800D40
+with sharing disabled. See the [Demo validation procedure](../application/rt-thread/rt-carplay-demo/docs/internet-sharing.md#required-iphone-acceptance)
+for capture details.

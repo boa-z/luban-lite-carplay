@@ -10,3 +10,6 @@
 [submodule "packages/third-party/cherryusb"]
 	path = packages/third-party/cherryusb
 	url = https://github.com/boa-z/CherryUSB.git
+[submodule "packages/third-party/lwip-napt"]
+	path = packages/third-party/lwip-napt
+	url = https://github.com/boa-z/lwip-napt.git
