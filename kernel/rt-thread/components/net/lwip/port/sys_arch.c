@@ -663,6 +663,13 @@ void mem_overflow_init_raw(void *p, size_t size)
 #endif
 
 #ifdef LWIP_HOOK_IP4_ROUTE_SRC
+#if defined(RTCARPLAY_INTERNET_SHARE)
+#include "lwip/napt_policy.h"
+struct netif *lwip_ip4_route_src(const ip4_addr_t *src, const ip4_addr_t *dest)
+{
+    return napt_policy_route(src, dest);
+}
+#else
 struct netif *lwip_ip4_route_src(const ip4_addr_t *dest, const ip4_addr_t *src)
 {
     struct netif *netif;
@@ -686,6 +693,8 @@ struct netif *lwip_ip4_route_src(const ip4_addr_t *dest, const ip4_addr_t *src)
 
     return NULL;
 }
+#endif
+
 #endif /* LWIP_HOOK_IP4_ROUTE_SRC */
 #endif /*LWIP_VERSION_MAJOR >= 2 */
 

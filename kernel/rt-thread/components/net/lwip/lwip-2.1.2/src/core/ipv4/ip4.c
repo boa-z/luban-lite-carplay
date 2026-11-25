@@ -39,6 +39,9 @@
  */
 
 #include "lwip/opt.h"
+#if IP_NAPT
+#include "lwip/napt_policy.h"
+#endif
 
 #if LWIP_IPV4
 
@@ -340,6 +343,10 @@ ip4_forward(struct pbuf *p, struct ip_hdr *iphdr, struct netif *inp)
                          ip4_addr1_16(ip4_current_dest_addr()), ip4_addr2_16(ip4_current_dest_addr()),
                          ip4_addr3_16(ip4_current_dest_addr()), ip4_addr4_16(ip4_current_dest_addr())));
 
+#if IP_NAPT
+  if (!napt_policy_forward(p, inp, netif)) goto return_noroute;
+#endif
+
   IP_STATS_INC(ip.fw);
   MIB2_STATS_INC(mib2.ipforwdatagrams);
   IP_STATS_INC(ip.xmit);
@@ -509,6 +516,12 @@ ip4_input(struct pbuf *p, struct netif *inp)
       return ERR_OK;
     }
   }
+#endif
+
+#if IP_NAPT
+  p = napt_policy_input(p, inp);
+  if (p == NULL) return ERR_OK;
+  iphdr = (struct ip_hdr *)p->payload;
 #endif
 
   /* copy IP addresses to aligned ip_addr_t */

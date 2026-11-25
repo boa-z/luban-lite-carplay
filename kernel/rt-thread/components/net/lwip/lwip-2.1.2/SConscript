@@ -238,6 +238,9 @@ src += lwipcore4_SRCS
 path = [cwd + '/src/include',
     cwd + '/src/include/netif']
 
+if GetDepend('RT_LWIP_MDNS'):
+    src += lwipmdns_SRCS
+
 if not GetDepend('RT_USING_SAL'):
     path += [cwd + '/src/include/compat/posix']
 
@@ -258,6 +261,9 @@ if GetDepend(['RT_LWIP_USING_PING']):
 if GetDepend(['RT_LWIP_USING_MQTT']):
     src += lwipmqtt_SRCS
     path += [cwd + '/src/apps/mqtt']
+
+if GetDepend('RTCARPLAY_NETWORK_TIME'):
+    src += lwipsntp_SRCS
 
 mycflags = ' -w'
 group = DefineGroup('lwIP', src, depend = ['RT_USING_LWIP', 'RT_USING_LWIP212'], CPPPATH = path, LOCAL_CFLAGS = mycflags)

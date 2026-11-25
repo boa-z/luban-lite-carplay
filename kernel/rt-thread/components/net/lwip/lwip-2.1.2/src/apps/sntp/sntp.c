@@ -455,7 +455,8 @@ sntp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr,
   {
     /* process the response */
     if (p->tot_len == SNTP_MSG_LEN) {
-      mode = pbuf_get_at(p, SNTP_OFFSET_LI_VN_MODE) & SNTP_MODE_MASK;
+      u8_t header = pbuf_get_at(p, SNTP_OFFSET_LI_VN_MODE);
+      mode = header & SNTP_MODE_MASK;
       /* if this is a SNTP response... */
       if (((sntp_opmode == SNTP_OPMODE_POLL)       && (mode == SNTP_MODE_SERVER)) ||
           ((sntp_opmode == SNTP_OPMODE_LISTENONLY) && (mode == SNTP_MODE_BROADCAST))) {
@@ -475,7 +476,12 @@ sntp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr,
                         ("sntp_recv: Invalid originate timestamp in response\n"));
           } else
 #endif /* SNTP_CHECK_RESPONSE >= 2 */
-            /* @todo: add code for SNTP_CHECK_RESPONSE >= 3 and >= 4 here */
+#if SNTP_CHECK_RESPONSE >= 3
+          if ((header & 0xc0) == 0xc0 || !(header & 0x38) || stratum > 15 ||
+              (!timestamps.xmit.sec && !timestamps.xmit.frac)) {
+            err = ERR_TIMEOUT;
+          } else
+#endif
           {
             /* correct answer */
             err = ERR_OK;

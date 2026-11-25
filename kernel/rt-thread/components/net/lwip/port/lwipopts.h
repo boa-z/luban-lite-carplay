@@ -33,8 +33,25 @@
 #define LWIP_SOCKET_SELECT      1
 #define LWIP_SOCKET_POLL        1
 #define LWIP_TCPIP_CORE_LOCKING 1
+#ifdef RT_LWIP_QUEUED_INPUT
+#define LWIP_TCPIP_CORE_LOCKING_INPUT 0
+#else
 #define LWIP_TCPIP_CORE_LOCKING_INPUT 1
+#endif
 #define LWIP_RAND rand
+
+#ifdef RTCARPLAY_NETWORK_TIME
+#define SNTP_CHECK_RESPONSE 3
+#define SNTP_STARTUP_DELAY  0
+void carplay_network_time_sample(unsigned int seconds);
+#define SNTP_SET_SYSTEM_TIME(sec) carplay_network_time_sample(sec)
+#define SNTP_GET_SYSTEM_TIME_NTP(sec, frac)             \
+    do                                                 \
+    {                                                  \
+        (sec) = (s32_t)sys_now();                       \
+        (frac) = ((u32_t)rand() << 16) ^ (u32_t)rand();  \
+    } while (0)
+#endif
 
 #ifndef SSIZE_MAX
 #define SSIZE_MAX INT_MAX
@@ -85,7 +102,7 @@
 #define LWIP_DNS                    0
 #endif
 
-#ifdef AIC_WLAN_AIC8800D40L
+#ifdef AIC_WLAN_AIC8800
 #define LWIP_HAVE_LOOPIF            1
 #else
 #define LWIP_HAVE_LOOPIF            0
@@ -454,7 +471,14 @@
 /* Define IP_FORWARD to 1 if you wish to have the ability to forward
    IP packets across network interfaces. If you are going to run lwIP
    on a device with only one network interface, define this to 0. */
-#define IP_FORWARD                  0
+#ifdef RTCARPLAY_INTERNET_SHARE
+#define IP_FORWARD 1
+#define IP_NAPT 1
+#define IP_NAPT_PORTMAP 0
+#define IP_NAPT_MAX 128
+#else
+#define IP_FORWARD 0
+#endif
 
 /* IP reassembly and segmentation.These are orthogonal even
  * if they both deal with IP fragments */
@@ -497,7 +521,9 @@
 
 #define LWIP_UDPLITE                0
 #define UDP_TTL                     255
-#ifdef AIC_WLAN_AIC8800D40L
+#ifdef RT_LWIP_UDP_RECVMBOX_SIZE
+#define DEFAULT_UDP_RECVMBOX_SIZE   RT_LWIP_UDP_RECVMBOX_SIZE
+#elif defined(AIC_WLAN_AIC8800)
 #define DEFAULT_UDP_RECVMBOX_SIZE   32
 #else
 #define DEFAULT_UDP_RECVMBOX_SIZE   1
@@ -510,7 +536,7 @@
 #define LWIP_RAW                    0
 #endif
 
-#ifdef AIC_WLAN_AIC8800D40L
+#ifdef AIC_WLAN_AIC8800
 #define DEFAULT_RAW_RECVMBOX_SIZE   32
 #define DEFAULT_ACCEPTMBOX_SIZE     32
 #else
@@ -609,8 +635,33 @@
 #define LWIP_NETIF_API                  1
 #endif
 
-/* MEMP_NUM_SYS_TIMEOUT: the number of simulateously active timeouts. */
+#ifdef RT_LWIP_MDNS
+#ifndef LWIP_MDNS_RESPONDER
+#define LWIP_MDNS_RESPONDER             1
+#endif
+#ifndef LWIP_NUM_NETIF_CLIENT_DATA
+#define LWIP_NUM_NETIF_CLIENT_DATA      1
+#endif
+#ifndef MDNS_MAX_SERVICES
+#define MDNS_MAX_SERVICES               4
+#endif
+#endif
+
+/* The core formula excludes mDNS probe timers (one per registered netif),
+ * NAPT and the application's network monitor. Keep those owners budgeted
+ * separately; otherwise returning to wireless can exhaust the static pool. */
+#ifdef RT_USING_LWIP212
+#ifndef RT_LWIP_SYS_TIMEOUT_EXTRA
+#if defined(RT_LWIP_MDNS) || defined(RTCARPLAY_INTERNET_SHARE) || defined(RTCARPLAY_NETWORK_TIME)
+#define RT_LWIP_SYS_TIMEOUT_EXTRA 8
+#else
+#define RT_LWIP_SYS_TIMEOUT_EXTRA 0
+#endif
+#endif
+#define MEMP_NUM_SYS_TIMEOUT       (LWIP_NUM_SYS_TIMEOUT_INTERNAL + RT_LWIP_SYS_TIMEOUT_EXTRA)
+#else
 #define MEMP_NUM_SYS_TIMEOUT       (LWIP_TCP + IP_REASSEMBLY + LWIP_ARP + (2 * LWIP_DHCP) + LWIP_AUTOIP + LWIP_IGMP + LWIP_DNS + PPP_SUPPORT + (LWIP_IPV6 ? (1 + (2 * LWIP_IPV6)) : 0))
+#endif
 
 /*
  * LWIP_COMPAT_SOCKETS==1: Enable BSD-style sockets functions names.
@@ -651,7 +702,11 @@
  * If LWIP_SO_RCVBUF is used, this is the default value for recv_bufsize.
  */
 #ifndef RECV_BUFSIZE_DEFAULT
+#ifdef RT_LWIP_RECV_BUFSIZE
+#define RECV_BUFSIZE_DEFAULT            RT_LWIP_RECV_BUFSIZE
+#else
 #define RECV_BUFSIZE_DEFAULT            8192
+#endif
 #endif
 
 /**

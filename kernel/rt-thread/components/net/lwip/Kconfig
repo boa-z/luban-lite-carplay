@@ -133,6 +133,15 @@ if RT_USING_LWIP
         int "the number of struct netconns"
         default 64
 
+    config RT_LWIP_SYS_TIMEOUT_EXTRA
+        int "Additional application timeout pool entries"
+        range 0 128
+        default 8
+        help
+            lwIP's internal timer formula excludes application timers. Reserve
+            entries for mDNS per-interface probing, NAPT and network monitoring.
+            Increase this value when adding more interfaces or timer owners.
+
     config RT_LWIP_PBUF_NUM
         int "the number of PBUF"
         default 64
@@ -140,6 +149,20 @@ if RT_USING_LWIP
     config RT_LWIP_RAW_PCB_NUM
         int "the number of raw connection"
         default 64
+
+    config RT_LWIP_UDP_RECVMBOX_SIZE
+        int "UDP receive mailbox slots per socket"
+        range 1 256
+        default 32 if AIC_WLAN_AIC8800
+        default 1
+        help
+            Maximum datagrams queued before the socket owner runs. Bursty
+            media needs both enough slots and a sufficient receive byte limit.
+
+    config RT_LWIP_RECV_BUFSIZE
+        int "Default UDP/raw receive byte limit per socket"
+        range 8192 1048576
+        default 8192
 
     config RT_LWIP_UDP_PCB_NUM
         int "the number of UDP socket"
@@ -165,16 +188,26 @@ if RT_USING_LWIP
 
     config RT_LWIP_TCPTHREAD_PRIORITY
         int "the priority level value of lwIP thread"
-        default 5 if AIC_WLAN_AIC8800D40L
+        default 5 if AIC_WLAN_AIC8800
         default 10
 
     config RT_LWIP_TCPTHREAD_MBOX_SIZE
         int "the number of mail in the lwIP thread mailbox"
         default 128
 
+    config RT_LWIP_QUEUED_INPUT
+        bool "Queue received packets for the lwIP thread"
+        default n
+        help
+            Pass RX packets through the bounded TCP/IP mailbox instead of
+            processing them while holding the core lock in the driver RX
+            thread. This lets USB RX rearm while TCP ACK output waits for a
+            synchronous transfer. A full mailbox returns an input error;
+            the network adapter must then free the rejected pbuf.
+
     config RT_LWIP_TCPTHREAD_STACKSIZE
         int "the stack size of lwIP thread"
-        default 8192 if AIC_WLAN_AIC8800D40L
+        default 8192 if AIC_WLAN_AIC8800
         default 4096
 
     config LWIP_NO_RX_THREAD
@@ -275,6 +308,11 @@ if RT_USING_LWIP
                 default "1.1.1.1"
         endif
     endif
+
+    config RT_LWIP_MDNS
+        bool "Enable the lwIP mDNS responder"
+        depends on RT_USING_LWIP212 && RT_LWIP_UDP
+        default y if LPKG_USING_RT_CARPLAY
 
     config RT_LWIP_USING_MQTT
         bool "Enable lwip mqtt client"

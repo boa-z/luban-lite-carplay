@@ -4,6 +4,8 @@ cwd = GetCurrentDir()
 path  = [cwd]
 
 src  = Glob('*.c')
+if GetDepend(['RT_USING_LWIP212', 'RTCARPLAY_INTERNET_SHARE']):
+    src += Glob('napt/*.c')
 
 mycflags = ' -w'
 group = DefineGroup('lwIP', src, depend = ['RT_USING_LWIP'], CPPPATH = path,  LOCAL_CFLAGS = mycflags)

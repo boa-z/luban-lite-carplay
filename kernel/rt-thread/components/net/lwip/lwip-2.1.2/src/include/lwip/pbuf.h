@@ -169,6 +169,9 @@ typedef enum {
 
 
 /** indicates this packet's data should be immediately passed to the application */
+#if IP_NAPT
+#define PBUF_FLAG_NAPT_TRANSLATED 0x40U
+#endif
 #define PBUF_FLAG_PUSH      0x01U
 /** indicates this is a custom pbuf: pbuf_free calls pbuf_custom->custom_free_function()
     when the last reference is released (plus custom PBUF_RAM cannot be trimmed) */
