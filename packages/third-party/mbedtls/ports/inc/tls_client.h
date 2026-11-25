@@ -31,6 +31,7 @@ typedef struct MbedTLSSession
 {
     char* host;
     char* port;
+    const char *outbound_netif;
 
     unsigned char *buffer;
     size_t buffer_len;

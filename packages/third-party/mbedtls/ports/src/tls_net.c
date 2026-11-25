@@ -158,7 +158,8 @@ void mbedtls_net_init( mbedtls_net_context *ctx )
 /*
  * Initiate a TCP connection with host:port and the given protocol
  */
-int mbedtls_net_connect( mbedtls_net_context *ctx, const char *host, const char *port, int proto )
+int mbedtls_net_connect_on( mbedtls_net_context *ctx, const char *host, const char *port,
+                            int proto, const char *netif )
 {
     int ret;
     struct addrinfo hints, *addr_list, *cur;
@@ -168,7 +169,7 @@ int mbedtls_net_connect( mbedtls_net_context *ctx, const char *host, const char 
 
     /* Do name resolution with both IPv6 and IPv4 */
     memset( &hints, 0, sizeof( hints ) );
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = netif ? AF_INET : AF_UNSPEC;
     hints.ai_socktype = proto == MBEDTLS_NET_PROTO_UDP ? SOCK_DGRAM : SOCK_STREAM;
     hints.ai_protocol = proto == MBEDTLS_NET_PROTO_UDP ? IPPROTO_UDP : IPPROTO_TCP;
 
@@ -187,6 +188,28 @@ int mbedtls_net_connect( mbedtls_net_context *ctx, const char *host, const char 
             continue;
         }
 
+        if( netif )
+        {
+#if defined(RTTHREAD_VERSION) && defined(SO_BINDTODEVICE) && !defined(RT_USING_SAL)
+            struct ifreq binding = {0};
+            if( strlen(netif) >= sizeof(binding.ifr_name) )
+                ret = MBEDTLS_ERR_NET_SOCKET_FAILED;
+            else
+            {
+                strcpy(binding.ifr_name, netif);
+                ret = setsockopt(ctx->fd, SOL_SOCKET, SO_BINDTODEVICE, &binding, sizeof(binding))
+                      ? MBEDTLS_ERR_NET_SOCKET_FAILED : 0;
+            }
+#else
+            ret = MBEDTLS_ERR_NET_SOCKET_FAILED;
+#endif
+            if( ret )
+            {
+                closesocket( ctx->fd );
+                ctx->fd = -1;
+                break;
+            }
+        }
         if( connect( ctx->fd, cur->ai_addr, MSVC_INT_CAST cur->ai_addrlen ) == 0 )
         {
             ret = 0;
@@ -194,12 +217,18 @@ int mbedtls_net_connect( mbedtls_net_context *ctx, const char *host, const char 
         }
 
         closesocket( ctx->fd );
+        ctx->fd = -1;
         ret = MBEDTLS_ERR_NET_CONNECT_FAILED;
     }
 
     freeaddrinfo( addr_list );
 
     return( ret );
+}
+
+int mbedtls_net_connect( mbedtls_net_context *ctx, const char *host, const char *port, int proto )
+{
+    return mbedtls_net_connect_on(ctx, host, port, proto, NULL);
 }
 
 /*

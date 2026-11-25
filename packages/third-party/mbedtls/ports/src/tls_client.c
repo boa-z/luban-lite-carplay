@@ -194,8 +194,8 @@ int mbedtls_client_connect(MbedTLSSession *session)
 {
     int ret = 0;
 
-    ret = mbedtls_net_connect(&session->server_fd, session->host,
-                                session->port, MBEDTLS_NET_PROTO_TCP);
+    ret = mbedtls_net_connect_on(&session->server_fd, session->host,
+                                 session->port, MBEDTLS_NET_PROTO_TCP, session->outbound_netif);
     if (ret != 0)
     {
         LOG_E("mbedtls_net_connect error, return -0x%x", -ret);

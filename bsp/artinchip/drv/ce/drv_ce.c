@@ -630,6 +630,9 @@ static rt_err_t drv_aes_crypt(struct hwcrypto_symmetric *symmetric_ctx,
             ret = aes_cbc_crypto(key, klen, mode, iv, in, out, dlen);
             break;
         case HWCRYPTO_TYPE_AES_CTR:
+            /* Native CTR is not implemented. Never report successful
+             * encryption while leaving output untouched or copying input. */
+            ret = -RT_ERROR;
             break;
         default:
             ret = -RT_ERROR;
