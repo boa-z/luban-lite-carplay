@@ -138,6 +138,17 @@ struct net_buf *bt_buf_get_rx(enum bt_buf_type type, k_timeout_t timeout)
 	buf = net_buf_alloc(&hci_rx_pool, timeout);
 #endif
 	if (buf) {
+#if defined(CONFIG_BT_HCI_ACL_FLOW_CONTROL)
+		if (type == BT_BUF_ACL_IN) {
+			/* A transport may discard a duplicate/truncated H5 frame before
+			 * hci_acl assigns its connection. Zero is a valid connection index,
+			 * so zero-initialized user data must not generate controller credits.
+			 */
+			struct bt_conn_rx *rx = net_buf_user_data(buf);
+
+			rx->index = BT_CONN_INDEX_INVALID;
+		}
+#endif
 		net_buf_add_u8(buf, bt_buf_type_to_h4(type));
 	}
 

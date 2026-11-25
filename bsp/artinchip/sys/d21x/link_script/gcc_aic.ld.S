@@ -183,6 +183,14 @@ SECTIONS
  KEEP(*(SORT_BY_NAME(._bt_conn_cb.static.*)));
  _bt_conn_cb_list_end = .;
 
+#ifdef LPKG_BT_SETTINGS
+  /* Keep Zephyr's bond/identity settings handlers in the iterable table. */
+  . = ALIGN(0x8);
+ _settings_handler_static_list_start = .;
+ KEEP(*(SORT_BY_NAME(._settings_handler_static.static.*)));
+ _settings_handler_static_list_end = .;
+#endif
+
   /* zephyr bluetooth bt_sco_conn_cb */
   . = ALIGN(0x8) ;
  _bt_sco_conn_cb_list_start = .;

@@ -15,6 +15,7 @@
 #include <zephyr/init.h>
 //#include <drivers/uart.h>
 #include <zephyr/drivers/bt_uart.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/sys/byteorder.h>
 #include <string.h>
@@ -39,6 +40,7 @@ struct h4_data {
 		struct k_fifo   fifo;
 
 		struct k_sem    ready;
+		atomic_t        waiting_for_buf;
 
 		uint16_t        remaining;
 		uint16_t        discard;
@@ -226,6 +228,21 @@ static struct net_buf *get_rx(struct h4_data *h4, k_timeout_t timeout)
 	return NULL;
 }
 
+static bool prepare_rx_buf(struct h4_data *h4)
+{
+	size_t tailroom = net_buf_tailroom(h4->rx.buf);
+
+	if (tailroom < h4->rx.remaining + h4->rx.hdr_len) {
+		LOG_ERR("Not enough space in buffer %u/%zu", h4->rx.remaining, tailroom);
+		h4->rx.discard = h4->rx.remaining;
+		reset_rx(h4);
+		return false;
+	}
+
+	copy_hdr(h4);
+	return true;
+}
+
 static void rx_thread(void *p1, void *p2, void *p3)
 {
 	const struct device *dev = p1;
@@ -236,47 +253,23 @@ static void rx_thread(void *p1, void *p2, void *p3)
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
 
-	LOG_DBG("started");
+	uart_irq_rx_enable(cfg->uart);
 
 	while (1) {
-		LOG_DBG("rx.buf %p", h4->rx.buf);
-
-		/* We can only do the allocation if we know the initial
-		 * header, since Command Complete/Status events must use the
-		 * original command buffer (if available).
-		 */
-		if (h4->rx.have_hdr && !h4->rx.buf) {
-			h4->rx.buf = get_rx(h4, K_FOREVER);
-			LOG_DBG("Got rx.buf %p", h4->rx.buf);
-			if (h4->rx.remaining > net_buf_tailroom(h4->rx.buf)) {
-				LOG_ERR("Not enough space in buffer");
-				h4->rx.discard = h4->rx.remaining;
-				reset_rx(h4);
-			} else {
-				copy_hdr(h4);
-			}
-		}
-
-		/* Let the ISR continue receiving new packets */
-		uart_irq_rx_enable(cfg->uart);
-
 		k_sem_take(&h4->rx.ready, K_FOREVER);
+		bool waiting_for_buf = atomic_get(&h4->rx.waiting_for_buf);
 
-		buf = k_fifo_get(&h4->rx.fifo, K_NO_WAIT);
-		while (buf != NULL) {
-			uart_irq_rx_enable(cfg->uart);
-
+		while ((buf = k_fifo_get(&h4->rx.fifo, K_NO_WAIT)) != NULL) {
 			LOG_DBG("Calling bt_recv(%p)", buf);
 			h4->recv(dev, buf);
-
-			/* Give other threads a chance to run if the ISR
-			 * is receiving data so fast that rx.fifo never
-			 * or very rarely goes empty.
-			 */
 			k_yield();
+		}
 
-			uart_irq_rx_disable(cfg->uart);
-			buf = k_fifo_get(&h4->rx.fifo, K_NO_WAIT);
+		if (waiting_for_buf) {
+			h4->rx.buf = get_rx(h4, K_FOREVER);
+			prepare_rx_buf(h4);
+			atomic_clear(&h4->rx.waiting_for_buf);
+			uart_irq_rx_enable(cfg->uart);
 		}
 	}
 }
@@ -303,8 +296,6 @@ static inline void read_payload(const struct device *dev)
 	int read;
 
 	if (!h4->rx.buf) {
-		size_t buf_tailroom;
-
 		h4->rx.buf = get_rx(h4, K_NO_WAIT);
 		if (!h4->rx.buf) {
 			if (h4->rx.discardable) {
@@ -314,36 +305,17 @@ static inline void read_payload(const struct device *dev)
 				return;
 			}
 
-			LOG_WRN("Failed to allocate, deferring to rx_thread");
 			uart_irq_rx_disable(cfg->uart);
-			/*
-			 * At this time, HCI UART RX is turned off, which means that no new
-			 * received data buffer will be put into the RX FIFO. This will cause
-			 * `rx.ready` to not be modified. It will probably remain unchanged and
-			 * the count of `rx.ready` will probably be 0.
-			 *
-			 * Since it is uncertain whether the RX thread is blocked waiting for
-			 * `rx.ready`, give a semaphore to try to wake up the RX thread.
-			 * Then there will be a renewed attempt at allocating an RX buffer in
-			 * the RX thread.
-			 */
+			atomic_set(&h4->rx.waiting_for_buf, 1);
+			LOG_DBG("RX buffer unavailable, deferring H:4 type 0x%02x",
+				h4->rx.type);
 			k_sem_give(&h4->rx.ready);
-			k_yield();
 			return;
 		}
 
-		LOG_DBG("Allocated rx.buf %p", h4->rx.buf);
-
-		buf_tailroom = net_buf_tailroom(h4->rx.buf);
-		if (buf_tailroom < (h4->rx.remaining + h4->rx.hdr_len)) {
-			LOG_ERR("Not enough space in buffer %u/%zu", h4->rx.remaining,
-				buf_tailroom);
-			h4->rx.discard = h4->rx.remaining;
-			reset_rx(h4);
+		if (!prepare_rx_buf(h4)) {
 			return;
 		}
-
-		copy_hdr(h4);
 	}
 
 	read = uart_fifo_read(cfg->uart, net_buf_tail(h4->rx.buf), h4->rx.remaining);
@@ -533,9 +505,6 @@ static int h4_open(const struct device *dev, bt_hci_recv_t recv)
 			      15,
 			      0, K_NO_WAIT);
 	k_thread_name_set(tid, "bt_rx_thread");
-
-	/* Active rx_thread at first time */
-	k_sem_give(&h4->rx.ready);
 
 	return 0;
 }

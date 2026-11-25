@@ -56,6 +56,7 @@ if LPKG_USING_ZEPHYR_BLUETOOTH
 
         config LPKG_ZEPHYR_BLUETOOTH_CHIPSET_AIC8800D40
             bool "AIC8800D40"
+            depends on AIC_WLAN_AIC8800D40
 
     endchoice
 

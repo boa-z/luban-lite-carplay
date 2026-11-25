@@ -179,13 +179,22 @@ static int link_key_set(const char *name, size_t len_rd,
 		return -EINVAL;
 	}
 
+	/* A nonempty record with an incompatible layout is not a deletion.
+	 * Keep the persisted bond for diagnosis/migration rather than erasing it
+	 * and reporting a successful restore to the application. */
+	if (len_rd != 0 && len_rd != BT_KEYS_LINK_KEY_STORAGE_LEN) {
+		LOG_ERR("BR bond restore size mismatch for %s: stored %u expected %u",
+			name, (unsigned)len_rd, (unsigned)BT_KEYS_LINK_KEY_STORAGE_LEN);
+		return -EINVAL;
+	}
+
 	len = read_cb(cb_arg, val, sizeof(val));
 	if (len < 0) {
 		LOG_ERR("Failed to read value (err %zu)", len);
 		return -EINVAL;
 	}
 
-	LOG_DBG("name %s val %s", name, len ? bt_hex(val, sizeof(val)) : "(null)");
+	/* Link key bytes must never appear in diagnostics. */
 
 	err = bt_settings_decode_key(name, &le_addr);
 	if (err) {
@@ -194,7 +203,11 @@ static int link_key_set(const char *name, size_t len_rd,
 	}
 
 	link_key = bt_keys_get_link_key(&le_addr.a);
-	if (len != BT_KEYS_LINK_KEY_STORAGE_LEN) {
+	if ((size_t)len != len_rd) {
+		LOG_ERR("BR bond short read for %s", name);
+		return -EIO;
+	}
+	if (len == 0) {
 		if (link_key) {
 			bt_keys_link_key_clear(link_key);
 			LOG_DBG("Clear keys for %s", bt_addr_le_str(&le_addr));
@@ -203,6 +216,11 @@ static int link_key_set(const char *name, size_t len_rd,
 		}
 
 		return 0;
+	}
+
+	if (!link_key) {
+		LOG_ERR("No space to restore link key for %s", name);
+		return -ENOMEM;
 	}
 
 	memcpy(link_key->storage_start, val, len);
