@@ -263,4 +263,3 @@ static int sdcard_automount_init(void)
 INIT_APP_EXPORT(sdcard_automount_init);
 #endif
 #endif
-
