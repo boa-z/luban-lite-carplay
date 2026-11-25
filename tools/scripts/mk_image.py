@@ -1678,9 +1678,14 @@ def concatenate_create_image(outname, flist, datadir):
 def img_gen_fw_file_name(cfg):
     # Image file name format:
     # <platform>_<product>_v<version>_c<anti-rollback counter>.img
-    img_file_name = cfg["image"]["info"]["platform"]
+    info = cfg["image"]["info"]
+    product = info["product"]
+    if info.get("filename_variant"):
+        base_product = info.get("product.backup", product)
+        product = base_product + "_" + info["filename_variant"] + product[len(base_product):]
+    img_file_name = info["platform"]
     img_file_name += "_"
-    img_file_name += cfg["image"]["info"]["product"]
+    img_file_name += product
     img_file_name += "_v"
     img_file_name += cfg["image"]["info"]["version"]
     if "anti-rollback" in cfg["image"]["info"]:
@@ -3636,6 +3641,8 @@ if __name__ == "__main__":
                         help="output image file dir")
     parser.add_argument("-c", "--config", type=str,
                         help="image configuration file name")
+    parser.add_argument("--variant", type=str,
+                        help="hardware variant in the firmware filename")
     parser.add_argument("-k", "--keydir", type=str,
                         help="key material directory")
     parser.add_argument("-e", "--extract", action='store_true',
@@ -3649,6 +3656,8 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--verbose", action='store_true',
                         help="show detail information")
     args = parser.parse_args()
+    if args.variant and not re.match(r'\A[A-Za-z0-9][A-Za-z0-9_-]*\Z', args.variant):
+        parser.error("--variant must contain only letters, digits, underscores or hyphens and start with a letter or digit")
     # If user not specified data directory, use current directory as default
     if args.datadir is None:
         args.datadir = './'
@@ -3678,6 +3687,8 @@ if __name__ == "__main__":
 
     pr_info("Package image ...")
     cfg = parse_image_cfg(args.config)
+    if args.variant:
+        cfg["image"]["info"]["filename_variant"] = args.variant
     # Pre-process here, e.g: signature, encryption, ...
     if get_pre_process_cfg(cfg) is not None:
         firmware_component_preproc(cfg, args.datadir, args.keydir, default_bin_root)

@@ -1889,8 +1889,13 @@ def mkimage_prebuild(aic_root, prj_chip, prj_board, prj_kernel, prj_app,
             MAKE_IMG_ARGS = ' -v -b -c '
         else:
             MAKE_IMG_ARGS = ' -v -c '
-        MAKE_IMG_ACTION = MAKE_IMG_TOOL + MAKE_IMG_ARGS + IMG_JSON + ' -d ' + prj_out_dir + '\n'
-        POST_ACTION += MAKE_IMG_ACTION
+        MAKE_IMG_ACTION = MAKE_IMG_TOOL + MAKE_IMG_ARGS + IMG_JSON + ' -d ' + prj_out_dir
+        image_variant = (get_config(prj_root_dir + '.config', 'CONFIG_PRJ_IMAGE_VARIANT') or '').strip('"')
+        if image_variant:
+            if not re.match(r'\A[A-Za-z0-9][A-Za-z0-9_-]*\Z', image_variant):
+                raise ValueError('Invalid CONFIG_PRJ_IMAGE_VARIANT: ' + image_variant)
+            MAKE_IMG_ACTION += ' --variant ' + image_variant
+        POST_ACTION += MAKE_IMG_ACTION + '\n'
 
     if get_config(prj_root_dir + '.config', ota_enable) == 'y':
         POST_ACTION += mkimage_cpio(aic_root, prj_chip, prj_kernel, prj_app,
