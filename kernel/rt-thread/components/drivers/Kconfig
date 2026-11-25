@@ -12,7 +12,7 @@ if RT_USING_DEVICE_IPC
     if RT_USING_SYSTEM_WORKQUEUE
         config RT_SYSTEM_WORKQUEUE_STACKSIZE
             int "The stack size for system workqueue thread"
-            default 8192 if AIC_WLAN_AIC8800D40L
+            default 8192 if AIC_WLAN_AIC8800
             default 2048
 
         config RT_SYSTEM_WORKQUEUE_PRIORITY
@@ -209,12 +209,12 @@ config RT_USING_SDIO
     if RT_USING_SDIO
         config RT_SDIO_STACK_SIZE
             int "The stack size for sdio irq thread"
-            default 16384 if AIC_WLAN_AIC8800D40L
+            default 16384 if AIC_WLAN_AIC8800
             default 512
 
         config RT_SDIO_THREAD_PRIORITY
             int "The priority level value of sdio irq thread"
-            default 3 if AIC_WLAN_AIC8800D40L
+            default 3 if AIC_WLAN_AIC8800
             default 15
 
         config RT_MMCSD_STACK_SIZE
@@ -641,7 +641,7 @@ menuconfig RT_USING_WIFI
 
             config RT_WLAN_WORKQUEUE_THREAD_SIZE
                 int "WLAN work queue thread size"
-                default 8192 if AIC_WLAN_AIC8800D40L
+                default 8192 if AIC_WLAN_AIC8800
                 default 2048
 
             config RT_WLAN_WORKQUEUE_THREAD_PRIO

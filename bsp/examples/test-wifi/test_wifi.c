@@ -13,7 +13,7 @@
 #include <math.h>
 #include "aic_core.h"
 
-#if defined(AIC_WLAN_AIC8800D40L)
+#if defined(AIC_WLAN_AIC8800)
 /*
  * aic8800 headers conflict with common SDK headers (struct list_head,
  * container_of, cpu_to_le32, etc.), so we declare the P2P API locally
@@ -589,7 +589,7 @@ static int aic_wifi_ap_basic_test(char *dev_name)
     return ret;
 }
 
-#if defined(AIC_WLAN_AIC8800D40L)
+#if defined(AIC_WLAN_AIC8800)
 static int aic_wifi_p2p_basic_test(void)
 {
     int fvif_idx = 0;
@@ -771,7 +771,7 @@ static int aic_wifi_p2p_basic_test(void)
 
     return ERR_NONE;
 }
-#endif /* AIC_WLAN_AIC8800D40L / AIC_WLAN_REALTEK */
+#endif /* AIC_WLAN_AIC8800 / AIC_WLAN_REALTEK */
 
 static void aic_wifi_report_err(void)
 {

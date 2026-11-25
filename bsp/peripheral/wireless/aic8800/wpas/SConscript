@@ -109,6 +109,6 @@ elif GetDepend(['PRJ_RV_TOOLCHAIN_V3_2_0']):
 else:
     LOCAL_CFLAGS += (' -w')
 
-group = DefineGroup('aic8800_wpas', src, depend = ['AIC_WLAN_AIC8800D40L'], CPPPATH = include_path, LOCAL_CFLAGS=LOCAL_CFLAGS)
+group = DefineGroup('aic8800_wpas', src, depend = ['AIC_WLAN_AIC8800'], CPPPATH = include_path, LOCAL_CFLAGS=LOCAL_CFLAGS)
 
 Return('group')

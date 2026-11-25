@@ -124,7 +124,7 @@ if RT_USING_TIMER_SOFT
 
     config RT_TIMER_THREAD_STACK_SIZE
         int "The stack size of timer thread"
-        default 8192 if AIC_WLAN_AIC8800D40L
+        default 8192 if AIC_WLAN_AIC8800
         default 2048 if ARCH_CPU_64BIT
         default 512
 endif

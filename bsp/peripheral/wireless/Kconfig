@@ -48,12 +48,25 @@ menuconfig AIC_WLAN_ASR
     select RT_USING_SYSTEM_WORKQUEUE
     select LPKG_USING_MBEDTLS
 
-menuconfig AIC_WLAN_AIC8800D40L
-    bool "AIC8800 wlan driver"
-    default n
+choice
+    prompt "AIC8800 WLAN module"
     depends on AIC_WIRELESS_LAN
+    optional
+
+config AIC_WLAN_AIC8800D40
+    bool "AIC8800D40 (BR/EDR capable)"
+
+config AIC_WLAN_AIC8800D40L
+    bool "AIC8800D40L and legacy AIC8800 WLAN profiles"
+
+endchoice
+
+config AIC_WLAN_AIC8800
+    bool
+    default y if AIC_WLAN_AIC8800D40 || AIC_WLAN_AIC8800D40L
     select LPKG_USING_MBEDTLS
-    if AIC_WLAN_AIC8800D40L
+
+    if AIC_WLAN_AIC8800
     source "bsp/peripheral/wireless/aic8800/Kconfig.dev"
     ##source "bsp/peripheral/wireless/aic8800/Kconfig.drv"
     endif

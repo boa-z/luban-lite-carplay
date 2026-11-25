@@ -6,8 +6,12 @@
 
 menu "Wlan0 Parameter"
 
+    config CHIP_SELECT_AIC8800D40
+        def_bool AIC_WLAN_AIC8800D40
+
     choice
         prompt "Select AIC8800 MODEL"
+        depends on AIC_WLAN_AIC8800D40L
         default CHIP_SELECT_AIC8800D40L
         config CHIP_SELECT_AIC8800D40L
             bool "select AIC8800D40L"
@@ -47,6 +51,11 @@ menu "Wlan0 Parameter"
 
     config CONFIG_AIC8800_BT_SUPPORT
         bool "enable aic8800 BT support"
+        default n
+
+    config AIC8800_AP_VENDOR_IE
+        bool "Set optional vendor elements before AIC8800 SoftAP starts"
+        depends on CHIP_SELECT_AIC8800D40 || CHIP_SELECT_AIC8800D40L
         default n
 
     config AIC_DEV_AIC8800_DEBUG_LOG

@@ -10,7 +10,7 @@ group = []
 
 if GetDepend(['AIC_WIFI_TEST']):
     src += Glob('./test_wifi.c')
-    if GetDepend(['AIC_WLAN_AIC8800D40L']):
+    if GetDepend(['AIC_WLAN_AIC8800']):
         CPPPATH += [AIC_ROOT + '/bsp/peripheral/wireless/aic8800/host/driver/drv_wlan']
         CPPPATH += [AIC_ROOT + '/bsp/peripheral/wireless/aic8800/host/driver/drv_fhost']
         CPPPATH += [AIC_ROOT + '/bsp/peripheral/wireless/aic8800/fdrv/macif']

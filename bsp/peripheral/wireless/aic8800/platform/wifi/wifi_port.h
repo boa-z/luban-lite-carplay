@@ -11,7 +11,7 @@
 #include "aic_plat_types.h"
 #include "sys_al.h"
 
-#ifdef CHIP_SELECT_AIC8800D40L
+#if defined(CHIP_SELECT_AIC8800D40) || defined(CHIP_SELECT_AIC8800D40L)
 #define CONFIG_CHIPID_SELECT   PRODUCT_ID_AIC8800D80
 #elif defined(CHIP_SELECT_AIC8800DW)
 #define CONFIG_CHIPID_SELECT   PRODUCT_ID_AIC8800DW

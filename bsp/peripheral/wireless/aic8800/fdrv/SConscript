@@ -26,6 +26,6 @@ elif GetDepend(['PRJ_RV_TOOLCHAIN_V3_2_0']):
 else:
     myccflags = (' -w')
 
-group = DefineGroup('aic8800', src, depend = ['AIC_WLAN_AIC8800D40L'], CPPPATH = include_path, LOCAL_CFLAGS=myccflags)
+group = DefineGroup('aic8800', src, depend = ['AIC_WLAN_AIC8800'], CPPPATH = include_path, LOCAL_CFLAGS=myccflags)
 
 Return('group')

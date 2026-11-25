@@ -18,6 +18,78 @@
 #include "cli_al.h"
 #include "wifi_def.h"
 
+#ifdef AIC8800_AP_VENDOR_IE
+#include "aic8800_wlan_ap.h"
+#include "fhost_wpa.h"
+
+struct aic8800_ap_request {
+    rt_thread_t thread;
+    char hex_ie[2 * (UINT8_MAX + 2) + 1];
+    rt_bool_t applied;
+};
+
+static struct aic8800_ap_request *ap_request;
+
+int __real_fhost_wpa_enable_network(int vif, int timeout_ms);
+
+int __wrap_fhost_wpa_enable_network(int vif, int timeout_ms)
+{
+    rt_base_t level = rt_hw_interrupt_disable();
+    struct aic8800_ap_request *request = ap_request;
+    if (request && request->thread != rt_thread_self())
+        request = NULL;
+    rt_hw_interrupt_enable(level);
+
+    if (request) {
+        char reply[16];
+        int reply_len = sizeof(reply);
+        int result = fhost_wpa_execute_cmd(vif, reply, &reply_len, 1000,
+                                           "SET ap_vendor_elements %s", request->hex_ie);
+        if (result != 0 || reply_len < 2 || memcmp(reply, "OK", 2) != 0) {
+            AIC_LOG_PRINTF("SoftAP vendor IE rejected: vif=%d rc=%d\n", vif, result);
+            return -RT_ERROR;
+        }
+        request->applied = RT_TRUE;
+    }
+    return __real_fhost_wpa_enable_network(vif, timeout_ms);
+}
+
+rt_err_t aic8800_wlan_start_ap_with_ie(struct rt_wlan_info *info, const char *password,
+                                      const uint8_t *ie, size_t len)
+{
+    static const char hex_digits[] = "0123456789abcdef";
+    struct aic8800_ap_request request = {0};
+    if (!ie || len < 5 || len > UINT8_MAX + 2 || ie[0] != 0xdd || ie[1] != len - 2)
+        return -RT_EINVAL;
+    request.thread = rt_thread_self();
+    for (size_t index = 0; index < len; ++index) {
+        request.hex_ie[index * 2] = hex_digits[ie[index] >> 4];
+        request.hex_ie[index * 2 + 1] = hex_digits[ie[index] & 0x0f];
+    }
+
+    rt_base_t level = rt_hw_interrupt_disable();
+    if (ap_request) {
+        rt_hw_interrupt_enable(level);
+        return -RT_EBUSY;
+    }
+    ap_request = &request;
+    rt_hw_interrupt_enable(level);
+
+    rt_err_t result = rt_wlan_start_ap_adv(info, password);
+
+    level = rt_hw_interrupt_disable();
+    ap_request = NULL;
+    rt_hw_interrupt_enable(level);
+
+    if (result == RT_EOK && !request.applied) {
+        rt_wlan_ap_stop();
+        AIC_LOG_PRINTF("SoftAP started without programming vendor IE\n");
+        return -RT_ERROR;
+    }
+    return result;
+}
+#endif
+
 #ifdef WIFI_USING_LOOPBACK_NETDEV
 bool loop_dev_reg_flag = 0;
 #endif
@@ -353,8 +425,9 @@ rt_err_t aic8800_get_mac(struct rt_wlan_device *wlan, rt_uint8_t *mac)
         int fhost_vif_idx = 0, ret;
         ret = aic_wifi_fvif_mac_address_get(fhost_vif_idx, mac);
         AIC_LOG_PRINTF("ret=%d, mac=%02X:%02X:%02X:%02X:%02X:%02X\n", ret, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        return ret == 0 ? RT_EOK : -RT_ERROR;
     }
-    return 0;
+    return -RT_EINVAL;
 }
 
 void aic8800_wifi_input(void *buf, int len, int if_id)

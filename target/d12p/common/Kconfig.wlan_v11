@@ -29,6 +29,9 @@ if AIC_WIRELESS_LAN
         string
         default "PE.20"
 
+    config AIC_WLAN_AIC8800
+        def_bool AIC_WLAN_AIC8800D40L
+
     config AIC_WIRELESS_BT_PWR_GPIO
         string
         default "PE.18"

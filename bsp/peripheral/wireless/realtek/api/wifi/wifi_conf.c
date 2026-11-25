@@ -806,6 +806,11 @@ int wifi_set_mac_address(char * mac)
 	return wext_private_command(WLAN0_NAME, buf, 0);
 }
 
+const char *wifi_ap_interface_name(void)
+{
+	return wifi_mode == RTW_MODE_STA_AP ? WLAN1_NAME : WLAN0_NAME;
+}
+
 int wifi_get_mac_address(char * mac)
 {
 	int ret = 0;
@@ -1985,7 +1990,6 @@ int wifi_show_setting(const char *ifname, rtw_wifi_setting_t *pSetting)
 			pr_info("  SECURITY => UNKNOWN\n");
 	}
 
-	pr_info("  PASSWORD => %s\n", pSetting->password);
 	return ret;
 }
 
@@ -2137,7 +2141,6 @@ int wifi_restart_ap(
 		volatile int ret;
 		pr_info("AP: ssid=%s\n", (char*)setting.ssid);
 		pr_info("AP: security_type=%d\n", setting.security_type);
-		pr_info("AP: password=%s\n", (char*)setting.password);
 		pr_info("AP: key_idx =%d\n", setting.key_idx);
 		ret = wifi_connect((char*)setting.ssid,
 									setting.security_type,

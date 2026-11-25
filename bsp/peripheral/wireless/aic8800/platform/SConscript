@@ -29,6 +29,12 @@ src += Glob('fmac/*.c')
 src += Glob('hal/*.c')
 src += Glob('utils/src/*.c')
 
+if GetDepend('AIC8800_AP_VENDOR_IE'):
+    import building
+    from SCons.Util import CLVar
+    building.Env['LINKFLAGS'] = CLVar(building.Env['LINKFLAGS'])
+    building.Env.AppendUnique(LINKFLAGS=['-Wl,--wrap=fhost_wpa_enable_network'])
+
 wifi_name = 'aic8800'
 lib_name = 'wlan_' + wifi_name + '_'+ rtconfig.CPUNAME
 LIBS = [lib_name]
@@ -41,6 +47,6 @@ elif GetDepend(['PRJ_RV_TOOLCHAIN_V3_2_0']):
 else:
     myccflags = (' -w')
 
-group = DefineGroup('aic8800', src, depend = ['AIC_WLAN_AIC8800D40L'], CPPPATH = include_path, LIBS=LIBS, LIBPATH=LIBPATH, LOCAL_CFLAGS=myccflags)
+group = DefineGroup('aic8800', src, depend = ['AIC_WLAN_AIC8800'], CPPPATH = include_path, LIBS=LIBS, LIBPATH=LIBPATH, LOCAL_CFLAGS=myccflags)
 
 Return('group')

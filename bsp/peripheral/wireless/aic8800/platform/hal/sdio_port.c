@@ -806,12 +806,14 @@ int aicwf_sdio_probe(struct sdio_func *func)
     sdio_function[FUNC_0] = &func[0];
     sdio_function[FUNC_1] = &func[1];
     sdio_function[FUNC_2] = &func[2];
-    #if 1
-    aic_wifi_init(CONFIG_WIFIMODE_SELECT, CONFIG_CHIPID_SELECT, NULL);
-    #else
-    wifi_driver_init();
+    ret = aic_wifi_init(CONFIG_WIFIMODE_SELECT, CONFIG_CHIPID_SELECT, NULL);
+    #if CONFIG_SDIO_HOST_MUTEX
+    if (ret < 0) {
+        rtos_mutex_delete(sdio_host_mutex);
+        sdio_host_mutex = NULL;
+    }
     #endif
-    return ret;
+    return ret < 0 ? ret : 0;
 }
 
 int aicwf_sdio_remove(struct sdio_func *func)
