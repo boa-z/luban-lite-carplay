@@ -221,8 +221,6 @@ CONFIG_RTCARPLAY_WIRED_NETIF="n0"
 # CONFIG_RTCARPLAY_WIRED_PROTOCOL_TRACE is not set
 CONFIG_RT_USING_LWIP_IPV6=y
 
-CONFIG_RTCARPLAY_DIR="../../../packages/third-party/rt-carplay"
-
 CONFIG_RTCARPLAY_DEMO_LAUNCHER=y
 CONFIG_RTCARPLAY_D213_BOARD_KEYS=y
 # The panel presents Classic video and the right-hand local instrument strip
