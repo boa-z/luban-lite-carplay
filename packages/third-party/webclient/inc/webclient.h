@@ -116,6 +116,7 @@ struct webclient_session
 
     char *host;                         /* server host */
     char *req_url;                      /* HTTP request address*/
+    const char *outbound_netif;          /* optional lwIP interface, caller-owned */
 
     int chunk_sz;
     int chunk_offset;
@@ -135,6 +136,7 @@ struct webclient_session *webclient_session_create(size_t header_sz);
 
 /* send HTTP GET request */
 int webclient_get(struct webclient_session *session, const char *URI);
+int webclient_get_once(struct webclient_session *session, const char *URI);
 
 /* send HTTP HEAD request */
 int webclient_shard_head_function(struct webclient_session *session, const char *URI, int *length);
