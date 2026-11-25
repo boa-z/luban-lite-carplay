@@ -1,6 +1,6 @@
 # Luban-Lite CarPlay
 
-本仓库为 [boa-z/luban-lite-carplay](https://github.com/boa-z/luban-lite-carplay)，默认开发分支 `carplay-oss`，上游主线为 [boa-z/luban-lite/master](https://github.com/boa-z/luban-lite/tree/master)。CarPlay 集成已迁出原 `jiachenin/luban-lite-jc` 开发线。
+本仓库为 [boa-z/luban-lite-carplay](https://github.com/boa-z/luban-lite-carplay)，默认开发分支 `carplay`，上游主线为 [boa-z/luban-lite/master](https://github.com/boa-z/luban-lite/tree/master)。CarPlay 集成已迁出原 `jiachenin/luban-lite-jc` 开发线。
 
 从 [D213 CarPlay 集成指南](https://github.com/boa-z/rt-carplay-demo/blob/main/README.zh-CN.md)（[English](https://github.com/boa-z/rt-carplay-demo)）查看构建、模块职责和上板验收。使用 `git submodule update --init --recursive` 初始化固定提交的 Demo、Receiver SDK 和 USB Ethernet 驱动。本仓库的 CI 构建裸机 Bootloader 和应用，校验 IMG 与 OTA CPIO。
 

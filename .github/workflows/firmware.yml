@@ -1,9 +1,9 @@
 name: D213 firmware
 on:
   push:
-    branches: [carplay-oss, codex/rt-carplay-demo-migration]
+    branches: [carplay]
   pull_request:
-    branches: [carplay-oss]
+    branches: [carplay]
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
           PYTHONUNBUFFERED: '1'
         run: bash .ci/build-firmware.sh
       - name: Write release notes
-        if: github.ref == 'refs/heads/carplay-oss'
+        if: github.ref == 'refs/heads/carplay'
         run: |
           set -euo pipefail
           images=(output/ci/*.img)
@@ -59,7 +59,7 @@ jobs:
       # A [ultra-dev] milestone still builds and uploads the image above, but
       # does not replace the rolling release until it is reviewed.
       - name: Publish rolling nightly release
-        if: github.ref == 'refs/heads/carplay-oss' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !contains(github.event.head_commit.message, '[ultra-dev]')))
+        if: github.ref == 'refs/heads/carplay' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !contains(github.event.head_commit.message, '[ultra-dev]')))
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
