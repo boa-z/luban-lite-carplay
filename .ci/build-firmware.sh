@@ -31,15 +31,21 @@ python3 application/rt-thread/rtcarplay/tests/run_ota_worker.py "$archive"
 asset=$(basename "${images[0]}")
 cp "${images[0]}" "$archive" "$dest/"
 {
-  printf 'sdk_commit=%s\n' "$(git rev-parse HEAD)"
+  printf 'luban_lite_version=1.3.3\n'
+  printf 'luban_lite_baseline=90a740fe9c1b663ea52ec3f7e1af35acde200aea\n'
+  printf 'integration_commit=%s\n' "$(git rev-parse HEAD)"
+  printf 'demo_commit=%s\n' "$(git -C application/rt-thread/rtcarplay rev-parse HEAD)"
+  printf 'rt_carplay_commit=%s\n' "$(git -C packages/third-party/rt-carplay rev-parse HEAD)"
+  printf 'cherryusb_ipheth_commit=%s\n' "$(git -C packages/third-party/cherryusb-ipheth rev-parse HEAD)"
   printf 'source_worktree_changes_begin\n'
   git status --porcelain --untracked-files=all -- . ':!target/d21x/demo128-nand-carplay/pack/bootloader.bin'
   printf 'source_worktree_changes_end\n'
   printf 'defconfig=%s\n' "$config"
+  printf 'hardware_target=d213-demo128-nand-carplay-rtl8733bs\n'
   printf 'carplay_ab_baseline=2\n'
   printf 'partition_layout_sha256=%s\n' "$(sha256sum "$pack/image_cfg.json" | cut -d ' ' -f1)"
   git submodule status --recursive
-  toolchain/bin/riscv64-unknown-elf-gcc --version | head -1
+  printf 'toolchain=%s\n' "$(toolchain/bin/riscv64-unknown-elf-gcc --version | sed -n '1p')"
   printf 'hardware_validation=NOT_RUN\n'
 } > "$dest/source-manifest.txt"
 (cd "$dest" && sha256sum "$asset" ota.cpio source-manifest.txt > SHA256SUMS)
