@@ -1,0 +1,15 @@
+import os
+
+from building import DefineGroup, GetCurrentDir, GetDepend
+
+cwd = GetCurrentDir()
+driver = os.path.normpath(os.path.join(cwd, '../../../../packages/third-party/rt-aic8800'))
+if GetDepend('RT_USING_RT_AIC8800') and not os.path.isfile(os.path.join(driver, 'SConscript')):
+    raise RuntimeError('Initialize the driver with git submodule update --init packages/third-party/rt-aic8800')
+
+group = DefineGroup('rt-aic8800-bsp', ['diagnostics.c'],
+                    depend=['RT_USING_RT_AIC8800'],
+                    CPPPATH=[os.path.join(driver, 'include'),
+                             os.path.join(cwd, '../aic8800/fdrv/fw'),
+                             os.path.join(cwd, '../artinchip_general_platform')])
+Return('group')

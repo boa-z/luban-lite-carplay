@@ -61,9 +61,26 @@ config AIC_WLAN_AIC8800D40L
 
 endchoice
 
+choice
+    prompt "AIC8800 Wi-Fi backend"
+    depends on AIC_WLAN_AIC8800D40 || AIC_WLAN_AIC8800D40L
+    default AIC8800_BACKEND_VENDOR
+
+config AIC8800_BACKEND_VENDOR
+    bool "AIC8800 Vendor Driver"
+
+config AIC8800_BACKEND_OPEN
+    bool "RT-AIC8800 Open Source Driver (SDIO diagnostics)"
+    depends on AIC_WLAN_AIC8800D40 && RT_USING_SDIO
+    depends on PRJ_APP = "helloworld"
+
+endchoice
+
+config RT_USING_RT_AIC8800
+    def_bool AIC8800_BACKEND_OPEN
+
 config AIC_WLAN_AIC8800
-    bool
-    default y if AIC_WLAN_AIC8800D40 || AIC_WLAN_AIC8800D40L
+    def_bool AIC8800_BACKEND_VENDOR
     select LPKG_USING_MBEDTLS
 
     if AIC_WLAN_AIC8800

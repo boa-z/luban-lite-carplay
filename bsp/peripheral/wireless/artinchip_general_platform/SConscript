@@ -3,6 +3,8 @@ from building import *
 
 cwd = GetCurrentDir()
 src = Glob('*.c')
+if GetDepend('AIC8800_BACKEND_OPEN'):
+    src = Glob('general_wireless_pin.c')
 path = [cwd]
 
 group = DefineGroup("gpio", src, depend = ['AIC_WIRELESS_LAN'], CPPPATH = path)

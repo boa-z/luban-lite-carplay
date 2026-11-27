@@ -13,3 +13,6 @@
 [submodule "packages/third-party/lwip-napt"]
 	path = packages/third-party/lwip-napt
 	url = https://github.com/boa-z/lwip-napt.git
+[submodule "packages/third-party/rt-aic8800"]
+	path = packages/third-party/rt-aic8800
+	url = https://github.com/boa-z/rt-aic8800.git
